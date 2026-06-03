@@ -66,12 +66,14 @@ async function main(): Promise<void> {
     }
 
     const server = createServer(apiKey, baseUrl);
-    logger.setServer(server);
-    logger.info('Starting MyMeet MCP server (STDIO transport)...');
+    console.error('[INFO] Starting MyMeet MCP server (STDIO transport)...');
 
     const transport = new StdioServerTransport();
     await server.connect(transport);
 
+    // Wire the logger only after transport is connected — sendLoggingMessage
+    // throws "Not connected" if called before server.connect() completes.
+    logger.setServer(server);
     logger.info('MyMeet MCP server connected and ready!');
     return;
   }
