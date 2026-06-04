@@ -1,12 +1,37 @@
 # MyMeet MCP Server
 
-Connect your AI assistant to your meetings. Record, search, analyze, and export meetings from Google Meet, Zoom, MS Teams, and 5 more platforms — right from Claude, Cursor, or any MCP-compatible client.
+Connect your AI assistant to your meetings. Record, transcribe, search, analyze, and export meetings from Google Meet, Zoom, Microsoft Teams and 5 more platforms — directly from Claude, Cursor, or any MCP-compatible client.
 
-## Quick Start
+- 🧰 **11 tools** — list, search, check status, summarize, transcript, download, record, rename, re-analyze, edit, delete
+- 🗂️ **11 analysis templates** — sales, HR, 1:1, research, protocol, medical, and more
+- 🔌 **Two ways to run** — locally over stdio (`npx`, zero config) or against a remote server over HTTP
+- 🔑 **Simple auth** — your MyMeet API key (an env var locally, `Authorization: Bearer …` over HTTP)
+- 📦 Published as [`@mymeet/mcp-server`](https://www.npmjs.com/package/@mymeet/mcp-server) · Node ≥ 18 · built on the official MCP SDK
+
+> **Need a key first?** Get your API key at **[app.mymeet.ai/settings](https://app.mymeet.ai/settings)** (or email hello@mymeet.ai for B2B access), then pick a setup below.
+
+---
+
+## Which setup should I use?
+
+|                | **Local — npm / stdio**                | **Remote — HTTP**                              |
+| -------------- | -------------------------------------- | ---------------------------------------------- |
+| **Install**    | `npx`, runs on your machine            | nothing — just point at a URL                  |
+| **Best for**   | Claude Desktop, Claude Code, Cursor    | Team/hosted setups, browser clients            |
+| **Auth**       | `MYMEET_API_KEY` env var               | `Authorization: Bearer <key>`                  |
+| **Hosting**    | n/a                                    | use hosted `mcp.mymeet.ai` or self-host        |
+
+Both expose the **exact same tools** — choose whatever your client supports.
+
+---
+
+## Option 1 — Local (npm, stdio)
+
+The server runs on your machine through `npx`; your API key lives in the client config and never leaves it. Requires **Node 18+**.
 
 ### Claude Desktop
 
-Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
@@ -14,9 +39,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
     "mymeet": {
       "command": "npx",
       "args": ["-y", "@mymeet/mcp-server"],
-      "env": {
-        "MYMEET_API_KEY": "your-api-key-here"
-      }
+      "env": { "MYMEET_API_KEY": "your-api-key-here" }
     }
   }
 }
@@ -38,86 +61,28 @@ Add to `.cursor/mcp.json`:
     "mymeet": {
       "command": "npx",
       "args": ["-y", "@mymeet/mcp-server"],
-      "env": {
-        "MYMEET_API_KEY": "your-api-key-here"
-      }
+      "env": { "MYMEET_API_KEY": "your-api-key-here" }
     }
   }
 }
 ```
 
-## API Key
+> Any stdio-capable MCP client (VS Code MCP extensions, Cline, Zed, etc.) follows the same pattern: command `npx`, args `-y @mymeet/mcp-server`, env `MYMEET_API_KEY`.
 
-Get your API key at [app.mymeet.ai/settings](https://app.mymeet.ai/settings). Contact hello@mymeet.ai for B2B access.
+---
 
-## Available Tools
+## Option 2 — Remote (HTTP)
 
-| Tool | Description |
-|------|-------------|
-| `mymeet_list_meetings` | List current user's meetings by default; use `scope: "workspace"` for all workspace meetings |
-| `mymeet_get_meeting_status` | Check processing status (new/queued/processing/processed/failed) |
-| `mymeet_get_meeting_report` | Get AI summary: key points, action items, decisions |
-| `mymeet_get_transcript` | Get full transcript with speaker labels and timestamps |
-| `mymeet_search_meetings` | Search current user's meetings across all pages by title, people, date range, status |
-| `mymeet_download_meeting` | Download report as md/json (inline) or pdf/docx (URL) |
-| `mymeet_record_meeting` | Schedule/start recording on 8 platforms with cron support |
-| `mymeet_rename_meeting` | Rename a meeting |
-| `mymeet_regenerate_template` | Re-analyze with a different template (11 available) |
-| `mymeet_update_summary` | Edit AI-generated summary sections |
-| `mymeet_delete_meeting` | Permanently delete a meeting |
+No local install — connect your client to the server URL and authenticate per request. Great for browser-based clients and shared team deployments.
 
-## Templates
+**Hosted URL:** `https://mcp.mymeet.ai/mcp`
 
-| Template | Use Case |
-|----------|----------|
-| `default-meeting` | Standard meeting summary |
-| `sales-meeting` | Sales call: objections, next steps, signals |
-| `sales-coaching` | Sales coaching feedback |
-| `hr-interview` | Candidate evaluation |
-| `research-interview` | Research insights and patterns |
-| `team-sync` | Updates, blockers, decisions |
-| `article` | SEO article from meeting content |
-| `lecture-notes` | Key concepts and takeaways |
-| `one-to-one` | Manager 1:1: feedback and goals |
-| `protocol` | Formal protocol: agenda, decisions |
-| `medicine` | Medical consultation notes |
+### Claude Desktop (custom connector)
 
-## Supported Platforms
+Settings → Connectors → **Add custom connector**:
 
-Google Meet, Zoom, Microsoft Teams, Yandex Telemost, SberJazz, TrueConf, KonturTalk, Jitsi
-
-## Try It
-
-```
-"Show me my recent meetings"
-"What was discussed in my last sales call?"
-"Show all workspace meetings from last week"
-"Record my Zoom meeting tomorrow at 2pm as a sales meeting"
-"Re-analyze meeting X using the hr-interview template"
-"Download the report for meeting Y as markdown"
-```
-
-### Meeting Scope
-
-Read-only tools default to `scope: "mine"`, matching the current API key user's meetings. Workspace owners and admins can request all workspace meetings by passing `scope: "workspace"` explicitly.
-
-To temporarily hide the search tool from MCP clients, set:
-
-```bash
-MYMEET_ENABLE_SEARCH_TOOL=false
-```
-
-## Remote Server (HTTP)
-
-MyMeet hosts a remote MCP server — no local installation needed:
-
-**URL:** `https://mcp.mymeet.ai/mcp`
-
-### Claude Desktop
-
-Settings → Customize → Connectors → Add custom connector:
-- URL: `https://mcp.mymeet.ai/mcp`
-- Header: `Authorization: Bearer YOUR_API_KEY`
+- **URL:** `https://mcp.mymeet.ai/mcp`
+- **Header:** `Authorization: Bearer YOUR_API_KEY`
 
 ### Claude Code
 
@@ -126,39 +91,177 @@ claude mcp add mymeet --transport http https://mcp.mymeet.ai/mcp \
   --header "Authorization: Bearer YOUR_API_KEY"
 ```
 
-### Cursor (remote)
+### Cursor
 
 ```json
 {
   "mcpServers": {
     "mymeet": {
       "url": "https://mcp.mymeet.ai/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_MYMEET_API_KEY"
-      }
+      "headers": { "Authorization": "Bearer YOUR_API_KEY" }
     }
   }
 }
 ```
 
-## Self-Hosted (Docker)
+---
+
+## Tools
+
+Read-only tools default to the current user's meetings (`scope: "mine"`); pass `scope: "workspace"` to span the whole workspace (owners/admins). Full parameters, responses, and edge cases live in **[docs/TOOLS.md](docs/TOOLS.md)**.
+
+| Tool | Type | Description |
+|------|------|-------------|
+| `mymeet_list_meetings` | read | List meetings (paginated). `scope: "workspace"` for all workspace meetings |
+| `mymeet_get_meeting_status` | read | Processing status: `new → queued → processing → processed / failed` |
+| `mymeet_get_meeting_report` | read | AI summary: key points, action items, decisions (no transcript) |
+| `mymeet_get_transcript` | read | Full transcript with speaker labels and timestamps |
+| `mymeet_search_meetings` | read | Search across all pages by title, people, date range, or status |
+| `mymeet_download_meeting` | read | Export report — `md`/`json` inline, `pdf`/`docx` as a download URL |
+| `mymeet_record_meeting` | write | Schedule/start recording on 8 platforms, with optional cron |
+| `mymeet_rename_meeting` | write | Rename a meeting |
+| `mymeet_regenerate_template` | write | Re-analyze a meeting with a different template |
+| `mymeet_update_summary` | write | Edit AI-generated summary sections |
+| `mymeet_delete_meeting` | write | ⚠️ Permanently delete a meeting |
+
+**Resource:** `mymeet://templates` returns the list of templates with descriptions, so the assistant can suggest the right one.
+
+---
+
+## Templates
+
+Used by `mymeet_record_meeting` and `mymeet_regenerate_template`:
+
+| Template | Use case |
+|----------|----------|
+| `default-meeting` | Standard summary with key points and action items |
+| `sales-meeting` | Sales call: objections, next steps, deal signals |
+| `sales-coaching` | Sales coaching feedback: technique, improvement areas |
+| `hr-interview` | Candidate evaluation: strengths, concerns, key answers |
+| `research-interview` | User research: insights, patterns, methodology notes |
+| `team-sync` | Per-person updates, blockers, decisions |
+| `article` | SEO article/blog post from meeting content |
+| `lecture-notes` | Key concepts, examples, study takeaways |
+| `one-to-one` | Manager 1:1: feedback, goals, action items |
+| `protocol` | Formal protocol: agenda, decisions, responsible parties |
+| `medicine` | Medical consultation: anamnesis, symptoms, recommendations |
+
+## Supported platforms
+
+Google Meet · Zoom · Microsoft Teams · Yandex Telemost · SberJazz · TrueConf · KonturTalk · Jitsi
+
+The platform is auto-detected from the meeting URL, or set it explicitly with the `source` parameter.
+
+---
+
+## Example prompts
+
+```
+"Show me my recent meetings"
+"What was discussed in my last sales call?"
+"Find my meetings with Vladimir from last week"
+"Show all workspace meetings that failed processing"
+"Record my Zoom meeting tomorrow at 2pm as a sales meeting"
+"Re-analyze meeting X using the hr-interview template"
+"Download the report for meeting Y as markdown"
+```
+
+---
+
+## Configuration
+
+All configuration is via environment variables.
+
+| Variable | Mode | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `MYMEET_API_KEY` | stdio | ✅ (stdio) | — | Your API key. Used in local/stdio mode. |
+| `MYMEET_ENABLE_SEARCH_TOOL` | both | — | `true` | Set to `false`/`0` to hide `mymeet_search_meetings`. |
+| `MYMEET_API_URL` | both | — | `https://backend.mymeet.ai` | Override the backend base URL (dev/staging). |
+| `PORT` | http | — | `3000` | HTTP listen port (Railway sets this automatically). |
+
+> **Auth:** In stdio mode the key comes from `MYMEET_API_KEY`. In HTTP mode each request carries its own API key in `Authorization: Bearer …` — there is **no env-key fallback in HTTP mode**, so every client presents its own key.
+
+---
+
+## Self-hosting the remote server
+
+The remote server is the same binary started with `--http`. It exposes:
+
+| Path | Purpose |
+|------|---------|
+| `POST /mcp` | MCP Streamable HTTP endpoint |
+| `GET /health` | Health check (returns `ok`) |
+
+### Docker
 
 ```bash
 docker build -t mymeet-mcp .
 docker run -p 3000:3000 mymeet-mcp
-# Clients connect to http://localhost:3000/mcp with Authorization header
+# Clients connect to http://localhost:3000/mcp with an Authorization header
 ```
+
+The image runs `node dist/index.js --http --port 3000` and ships a `/health` healthcheck.
+
+### Railway
+
+`railway.json` is preconfigured (NIXPACKS build, `npm start`, `/health` healthcheck, restart-on-failure). Push the repo and set env vars in the Railway dashboard.
+
+### systemd + nginx (bare VM)
+
+Reference units are in [`deploy/`](deploy/):
+
+- [`deploy/mymeet-mcp.service`](deploy/mymeet-mcp.service) — runs `node dist/index.js --http --port 3100` under systemd.
+- [`deploy/nginx-mcp.conf`](deploy/nginx-mcp.conf) — reverse-proxies `mcp.mymeet.ai` → `127.0.0.1:3100`. **SSE-critical settings** (`proxy_buffering off`, long read timeouts) are already in place for Streamable HTTP.
+
+```bash
+sudo cp deploy/mymeet-mcp.service /etc/systemd/system/
+sudo systemctl enable --now mymeet-mcp
+sudo cp deploy/nginx-mcp.conf /etc/nginx/sites-available/mcp && \
+  sudo ln -s /etc/nginx/sites-available/mcp /etc/nginx/sites-enabled/ && \
+  sudo nginx -s reload
+# then issue TLS with certbot (see the commented lines in the conf)
+```
+
+---
+
+## How it works
+
+```
+MCP client (Claude / Cursor / Code / …)
+        │  JSON-RPC over stdio  ── or ──  Streamable HTTP
+        ▼
+   index.ts      parse args, resolve credential, start transport
+        ▼
+   server.ts     register 11 tools + templates resource
+        ▼
+   client.ts     native fetch · 15s timeout · retry w/ backoff
+        ▼
+   https://backend.mymeet.ai/api/   (MyMeet REST API)
+```
+
+Design notes (logging that's safe for stdio, the report/transcript split, client-side search) are documented in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+
+---
 
 ## Development
 
 ```bash
-git clone https://github.com/mymeet-ai-first-company/mymeet-mcp-server.git
+git clone https://github.com/MyMeetAI/mymeet-mcp-server.git
 cd mymeet-mcp-server
 npm install
-npm run dev    # Run with tsx (hot reload)
-npm run build  # Build for production
-npm test       # Run tests
+cp .env.example .env   # add your MYMEET_API_KEY
 ```
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Run from source with `tsx` (hot reload, stdio) |
+| `npm start` | Run the built server in HTTP mode |
+| `npm run build` | Bundle to `dist/index.js` with `tsup` |
+| `npm test` | Run the test suite (`vitest`) |
+| `npm run test:watch` | Tests in watch mode |
+| `npm run lint` | Type-check with `tsc --noEmit` |
+
+To run the remote server locally: `npm run build && node dist/index.js --http --port 3000`.
 
 ## License
 
