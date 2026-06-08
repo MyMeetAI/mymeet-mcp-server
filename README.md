@@ -1,6 +1,6 @@
 # MyMeet MCP Server
 
-Connect your AI assistant to your meetings. Record, transcribe, search, analyze, and export meetings from Google Meet, Zoom, Microsoft Teams and 5 more platforms — directly from Claude, Cursor, or any MCP-compatible client.
+Connect your AI assistant to your meetings. Record, transcribe, search, analyze, and export meetings from Google Meet, Zoom, Microsoft Teams and 5 more platforms — directly from Claude, Cursor, Codex, or any MCP-compatible client.
 
 - 🧰 **11 tools** — list, search, check status, summarize, transcript, download, record, rename, re-analyze, edit, delete
 - 🗂️ **11 analysis templates** — sales, HR, 1:1, research, protocol, medical, and more
@@ -17,11 +17,11 @@ Connect your AI assistant to your meetings. Record, transcribe, search, analyze,
 |                | **Local — npm / stdio**                | **Remote — HTTP**                              |
 | -------------- | -------------------------------------- | ---------------------------------------------- |
 | **Install**    | `npx`, runs on your machine            | nothing — just point at a URL                  |
-| **Best for**   | Claude Desktop, Claude Code, Cursor    | Team/hosted setups, browser clients            |
+| **Best for**   | Claude Desktop, Claude Code, Cursor, Codex | Team/hosted setups, browser clients        |
 | **Auth**       | `MYMEET_API_KEY` env var               | `Authorization: Bearer <key>`                  |
 | **Hosting**    | n/a                                    | use hosted `mcp.mymeet.ai` or self-host        |
 
-Both expose the **exact same tools** — choose whatever your client supports.
+Both expose the **exact same tools** — choose whatever your client supports. Using a client that isn't listed below? Jump to **[Universal setup](#universal-setup-any-mcp-client)**.
 
 ---
 
@@ -67,7 +67,24 @@ Add to `.cursor/mcp.json`:
 }
 ```
 
-> Any stdio-capable MCP client (VS Code MCP extensions, Cline, Zed, etc.) follows the same pattern: command `npx`, args `-y @mymeet/mcp-server`, env `MYMEET_API_KEY`.
+### Codex (OpenAI)
+
+```bash
+codex mcp add mymeet --env MYMEET_API_KEY=your-key -- npx -y @mymeet/mcp-server
+```
+
+Or add the server to `~/.codex/config.toml` by hand:
+
+```toml
+[mcp_servers.mymeet]
+command = "npx"
+args = ["-y", "@mymeet/mcp-server"]
+env = { MYMEET_API_KEY = "your-api-key-here" }
+```
+
+> Run `/mcp` inside Codex to confirm the server connected and see its tools.
+
+> **Some other client?** Every stdio MCP client reduces to the same three values — see **[Universal setup](#universal-setup-any-mcp-client)** below.
 
 ---
 
@@ -103,6 +120,66 @@ claude mcp add mymeet --transport http https://mcp.mymeet.ai/mcp \
   }
 }
 ```
+
+### Codex (OpenAI)
+
+```bash
+export MYMEET_API_KEY=YOUR_API_KEY
+codex mcp add mymeet --url https://mcp.mymeet.ai/mcp --bearer-token-env-var MYMEET_API_KEY
+```
+
+Or add it to `~/.codex/config.toml` directly:
+
+```toml
+[mcp_servers.mymeet]
+url = "https://mcp.mymeet.ai/mcp"
+bearer_token_env_var = "MYMEET_API_KEY"
+```
+
+> Codex reads the token from the named env var and sends it as `Authorization: Bearer …` on every request, so the key stays out of the config file.
+
+---
+
+## Universal setup (any MCP client)
+
+Using a client that isn't listed above? Every MCP client reduces to the same handful of values — map them onto whatever shape it expects (a JSON `mcpServers` object, Codex's TOML `[mcp_servers.*]` table, or a `… mcp add` command). Both modes expose the identical tools.
+
+| Setting   | Local — stdio                  | Remote — HTTP                     |
+| --------- | ------------------------------ | --------------------------------- |
+| `command` | `npx`                          | —                                 |
+| `args`    | `["-y", "@mymeet/mcp-server"]` | —                                 |
+| `env`     | `MYMEET_API_KEY=<your key>`    | —                                 |
+| `url`     | —                              | `https://mcp.mymeet.ai/mcp`       |
+| auth      | —                              | `Authorization: Bearer <your key>` |
+
+**JSON clients** (Claude Desktop, Cursor, VS Code, Cline, Windsurf, Zed, …) — local (stdio) mode:
+
+```json
+{
+  "mcpServers": {
+    "mymeet": {
+      "command": "npx",
+      "args": ["-y", "@mymeet/mcp-server"],
+      "env": { "MYMEET_API_KEY": "your-api-key-here" }
+    }
+  }
+}
+```
+
+For remote (HTTP) mode, swap `command`/`args`/`env` for a `url` and an auth header:
+
+```json
+{
+  "mcpServers": {
+    "mymeet": {
+      "url": "https://mcp.mymeet.ai/mcp",
+      "headers": { "Authorization": "Bearer your-api-key-here" }
+    }
+  }
+}
+```
+
+**TOML clients** (Codex) — use the `[mcp_servers.mymeet]` blocks shown in [Option 1](#option-1--local-npm-stdio) and [Option 2](#option-2--remote-http).
 
 ---
 
@@ -227,7 +304,7 @@ sudo cp deploy/nginx-mcp.conf /etc/nginx/sites-available/mcp && \
 ## How it works
 
 ```
-MCP client (Claude / Cursor / Code / …)
+MCP client (Claude / Cursor / Codex / Code / …)
         │  JSON-RPC over stdio  ── or ──  Streamable HTTP
         ▼
    index.ts      parse args, resolve credential, start transport
