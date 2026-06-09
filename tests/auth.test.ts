@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SignJWT, generateKeyPair } from 'jose';
 import {
   createVerifier,
+  extractBearerToken,
   extractVerifiedEmail,
   isJwtFormat,
   jwksUrl,
@@ -42,6 +43,36 @@ describe('isJwtFormat', () => {
     expect(isJwtFormat('a.b')).toBe(false); // two segments
     expect(isJwtFormat('a..c')).toBe(false); // empty segment
     expect(isJwtFormat('a.b.c.d')).toBe(false); // four segments
+  });
+});
+
+describe('extractBearerToken', () => {
+  it('strips the canonical `Bearer ` prefix', () => {
+    expect(extractBearerToken('Bearer mm_abc123')).toBe('mm_abc123');
+  });
+
+  it('accepts a bare token without the `Bearer ` prefix', () => {
+    // Clients (and users editing configs by hand) often drop the prefix —
+    // this is the whole point of the fix, so it must read as a credential.
+    expect(extractBearerToken('mm_abc123')).toBe('mm_abc123');
+  });
+
+  it('returns a JWT unchanged so the OAuth path still routes (with or without prefix)', () => {
+    expect(extractBearerToken('Bearer aaa.bbb.ccc')).toBe('aaa.bbb.ccc');
+    expect(extractBearerToken('aaa.bbb.ccc')).toBe('aaa.bbb.ccc');
+  });
+
+  it('matches the scheme case-insensitively and tolerates surrounding whitespace', () => {
+    expect(extractBearerToken('bearer mm_abc123')).toBe('mm_abc123');
+    expect(extractBearerToken('  Bearer   mm_abc123  ')).toBe('mm_abc123');
+  });
+
+  it('returns undefined when there is no usable token', () => {
+    expect(extractBearerToken(undefined)).toBeUndefined();
+    expect(extractBearerToken('')).toBeUndefined();
+    expect(extractBearerToken('   ')).toBeUndefined();
+    expect(extractBearerToken('Bearer ')).toBeUndefined();
+    expect(extractBearerToken('Bearer    ')).toBeUndefined();
   });
 });
 

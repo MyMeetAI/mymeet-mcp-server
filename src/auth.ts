@@ -37,6 +37,23 @@ export function readOAuthConfig(env: NodeJS.ProcessEnv = process.env): OAuthConf
 }
 
 /**
+ * Pulls the credential token out of an `Authorization` header value.
+ *
+ * Accepts both the canonical `Bearer <token>` form and a bare token: some MCP
+ * clients — and users pasting the snippet by hand — drop the `Bearer ` prefix,
+ * and we don't want that to read as "no credential". The scheme is matched
+ * case-insensitively (RFC 7235). Returns undefined when nothing usable is left,
+ * which the caller turns into a 401. Routing between OAuth and api-key happens
+ * downstream via {@link isJwtFormat}, so dropping the prefix never weakens the
+ * JWT signature check.
+ */
+export function extractBearerToken(authHeader: string | undefined): string | undefined {
+  if (!authHeader) return undefined;
+  const token = authHeader.replace(/^\s*Bearer\s+/i, '').trim();
+  return token.length > 0 ? token : undefined;
+}
+
+/**
  * A bearer value looks like a JWT when it has three non-empty base64url segments.
  * Used only to route between the OAuth path and the legacy api-key path — the
  * actual trust decision is the signature check in {@link verifyAccessToken}.

@@ -17,6 +17,7 @@ import type { Credential } from './client.js';
 import {
   readOAuthConfig,
   createRemoteVerifier,
+  extractBearerToken,
   isJwtFormat,
   extractVerifiedEmail,
 } from './auth.js';
@@ -132,22 +133,23 @@ async function main(): Promise<void> {
 
     // MCP endpoint
     if (urlPath === '/mcp') {
-      // Resolve the caller: a JWT (OAuth) or a raw api key (legacy).
+      // Resolve the caller: a JWT (OAuth) or a raw api key (legacy). The `Bearer `
+      // prefix is optional — clients that send the bare key still authenticate.
       const authHeader = req.headers['authorization'];
-      const bearer = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+      const token = extractBearerToken(authHeader);
 
       let credential: Credential | undefined;
-      if (bearer && oauthConfig && verifyToken && isJwtFormat(bearer)) {
+      if (token && oauthConfig && verifyToken && isJwtFormat(token)) {
         try {
-          const payload = await verifyToken(bearer);
+          const payload = await verifyToken(token);
           credential = { kind: 'oauth', email: extractVerifiedEmail(payload, oauthConfig) };
         } catch {
           logger.warn('Rejected an OAuth token'); // never log the token itself
           sendUnauthorized(res, oauthConfig);
           return;
         }
-      } else if (bearer) {
-        credential = { kind: 'apikey', apiKey: bearer };
+      } else if (token) {
+        credential = { kind: 'apikey', apiKey: token };
       }
       // No env-key fallback in HTTP mode: each client must present its own credential.
 
