@@ -31,7 +31,9 @@ The server runs on your machine through `npx`; your API key lives in the client 
 
 ### Claude Desktop
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+**Easiest — the `.mcpb` bundle (one-click).** Grab `mymeet.mcpb` from the [releases page](https://github.com/MyMeetAI/mymeet-mcp-server/releases) (or build it yourself with `npm run pack:mcpb`), then in Claude Desktop open **Settings → Extensions → Advanced → Install Extension…**, select the file, and paste your API key into the field — no JSON editing, and the key is stored in your OS keychain.
+
+Or configure it manually via `npx` — edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
 ```json
 {
@@ -94,12 +96,29 @@ No local install — connect your client to the server URL and authenticate per 
 
 **Hosted URL:** `https://mcp.mymeet.ai/mcp`
 
-### Claude Desktop (custom connector)
+### Claude Desktop
 
-Settings → Connectors → **Add custom connector**:
+Claude Desktop's JSON config works reliably through [`mcp-remote`](https://www.npmjs.com/package/mcp-remote), which runs locally over stdio and forwards requests to the hosted MCP endpoint. Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
-- **URL:** `https://mcp.mymeet.ai/mcp`
-- **Header:** `Authorization: Bearer YOUR_API_KEY`
+```json
+{
+  "mcpServers": {
+    "mymeet": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.mymeet.ai/mcp",
+        "--header",
+        "Authorization:${AUTH_HEADER}"
+      ],
+      "env": {
+        "AUTH_HEADER": "Bearer your-api-key-here"
+      }
+    }
+  }
+}
+```
 
 ### Claude Code
 
@@ -166,7 +185,7 @@ Using a client that isn't listed above? Every MCP client reduces to the same han
 }
 ```
 
-For remote (HTTP) mode, swap `command`/`args`/`env` for a `url` and an auth header:
+For remote (HTTP) mode, clients that support Streamable HTTP directly can swap `command`/`args`/`env` for a `url` and an auth header:
 
 ```json
 {
@@ -174,6 +193,28 @@ For remote (HTTP) mode, swap `command`/`args`/`env` for a `url` and an auth head
     "mymeet": {
       "url": "https://mcp.mymeet.ai/mcp",
       "headers": { "Authorization": "Bearer your-api-key-here" }
+    }
+  }
+}
+```
+
+Claude Desktop can use the hosted endpoint through `mcp-remote`:
+
+```json
+{
+  "mcpServers": {
+    "mymeet": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.mymeet.ai/mcp",
+        "--header",
+        "Authorization:${AUTH_HEADER}"
+      ],
+      "env": {
+        "AUTH_HEADER": "Bearer your-api-key-here"
+      }
     }
   }
 }
@@ -337,8 +378,11 @@ cp .env.example .env   # add your MYMEET_API_KEY
 | `npm test` | Run the test suite (`vitest`) |
 | `npm run test:watch` | Tests in watch mode |
 | `npm run lint` | Type-check with `tsc --noEmit` |
+| `npm run pack:mcpb` | Build and package the `.mcpb` desktop bundle (→ `mymeet.mcpb`) |
 
 To run the remote server locally: `npm run build && node dist/index.js --http --port 3000`.
+
+To build the desktop bundle: `npm run pack:mcpb` produces `mymeet.mcpb` (manifest + built server + production `node_modules`), installable via Claude Desktop's **Install Extension…**.
 
 ## License
 
