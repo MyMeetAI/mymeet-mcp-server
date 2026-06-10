@@ -1,5 +1,7 @@
 # MyMeet MCP Server
 
+**English** | [Русский](README.ru.md)
+
 Connect your AI assistant to your meetings. Record, transcribe, search, analyze, and export meetings from Google Meet, Zoom, Microsoft Teams and 5 more platforms — directly from Claude, Cursor, Codex, or any MCP-compatible client.
 
 - 🧰 **11 tools** — list, search, check status, summarize, transcript, download, record, rename, re-analyze, edit, delete
