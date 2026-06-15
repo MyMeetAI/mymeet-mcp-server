@@ -14,6 +14,24 @@ Connect your AI assistant to your meetings. Record, transcribe, search, analyze,
 
 ---
 
+## Contents
+
+- [Which setup should I use?](#which-setup-should-i-use)
+- [Option 1 — Local (npm, stdio)](#option-1--local-npm-stdio)
+- [Option 2 — Remote (HTTP)](#option-2--remote-http)
+- [Universal setup (any MCP client)](#universal-setup-any-mcp-client)
+- [Tools](#tools)
+- [Templates](#templates)
+- [Supported platforms](#supported-platforms)
+- [Example prompts](#example-prompts)
+- [Configuration](#configuration)
+- [Self-hosting the remote server](#self-hosting-the-remote-server)
+- [How it works](#how-it-works)
+- [Development](#development)
+- [License](#license)
+
+---
+
 ## Which setup should I use?
 
 |                | **Local — npm / stdio**                | **Remote — HTTP**                              |
