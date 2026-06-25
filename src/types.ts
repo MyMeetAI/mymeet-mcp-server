@@ -168,7 +168,11 @@ export const RegenerateTemplateSchema = z.object({
 
 export const UpdateSummarySchema = z.object({
   meetingId: z.string().describe('The unique meeting ID'),
-  summary: z.record(z.unknown()).describe('Updated summary sections as key-value pairs'),
+  templateId: z
+    .string()
+    .describe('ID of the template whose section to edit (from the meeting report)'),
+  entityName: z.string().describe('Name of the summary section/entity to update'),
+  newSummaryText: z.string().describe('New text for that section'),
 });
 
 export const DeleteMeetingSchema = z.object({

@@ -102,3 +102,83 @@ describe('MyMeetApiClient.request — non-JSON responses', () => {
     await expect(client.listMeetings()).resolves.toEqual({ meetings: [], total: 0 });
   });
 });
+
+// Regression: these write methods sent parameter names / paths the backend does
+// not accept, so they silently failed against the real API.
+describe('MyMeetApiClient — request shapes match the backend contract', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function okText(): Response {
+    return new Response('OK', { status: 200 });
+  }
+
+  function lastCall(fetchMock: ReturnType<typeof vi.fn>) {
+    const [url, init] = fetchMock.mock.calls[0];
+    return {
+      url: new URL(url as string),
+      method: (init as RequestInit).method,
+      body: JSON.parse(((init as RequestInit).body as string) ?? 'null'),
+    };
+  }
+
+  it('rename sends camelCase meetingId/newName', async () => {
+    const fetchMock = vi.fn(async () => okText());
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MyMeetApiClient('k', 'https://backend.example');
+    await client.renameMeeting('m-1', 'New title');
+
+    const { url, method, body } = lastCall(fetchMock);
+    expect(method).toBe('PUT');
+    expect(url.pathname).toBe('/api/meeting');
+    expect(body).toEqual({ meetingId: 'm-1', newName: 'New title' });
+  });
+
+  it('regenerate sends template_name (not new_template_name)', async () => {
+    const fetchMock = vi.fn(async () => okText());
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MyMeetApiClient('k', 'https://backend.example');
+    await client.regenerateTemplate('m-1', 'sales-meeting');
+
+    const { url, body } = lastCall(fetchMock);
+    expect(url.pathname).toBe('/api/generate-new-template');
+    expect(body).toEqual({ meeting_id: 'm-1', template_name: 'sales-meeting' });
+  });
+
+  it('updateSummary sends templateId/entityName/newSummaryText to the per-meeting path', async () => {
+    const fetchMock = vi.fn(async () => okText());
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MyMeetApiClient('k', 'https://backend.example');
+    await client.updateSummary('m-1', {
+      templateId: 't-1',
+      entityName: 'Action Items',
+      newSummaryText: 'Updated text',
+    });
+
+    const { url, method, body } = lastCall(fetchMock);
+    expect(method).toBe('PUT');
+    expect(url.pathname).toBe('/api/meeting/m-1/summary');
+    expect(body).toEqual({
+      templateId: 't-1',
+      entityName: 'Action Items',
+      newSummaryText: 'Updated text',
+    });
+  });
+
+  it('delete targets the DELETE /api/video/report endpoint', async () => {
+    const fetchMock = vi.fn(async () => okText());
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MyMeetApiClient('k', 'https://backend.example');
+    await client.deleteMeeting('m-1');
+
+    const { url, method } = lastCall(fetchMock);
+    expect(method).toBe('DELETE');
+    expect(url.pathname).toBe('/api/video/report');
+    expect(url.searchParams.get('meeting_id')).toBe('m-1');
+  });
+});

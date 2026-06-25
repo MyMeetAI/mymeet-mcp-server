@@ -47,7 +47,7 @@
 
 ## Вариант 1 — локально (npm, stdio)
 
-Сервер запускается на вашей машине через `npx`; API-ключ хранится в конфиге клиента и не покидает его. Требуется **Node 18+**.
+Сервер запускается на вашей машине через `npx`; API-ключ хранится в конфиге клиента и отправляется только на бэкенд MyMeet (заголовком `X-API-KEY`) — и никуда больше. Требуется **Node 18+**.
 
 ### Claude Desktop
 
@@ -316,8 +316,11 @@ Google Meet · Zoom · Microsoft Teams · Яндекс Телемост · SberJ
 | `MYMEET_ENABLE_SEARCH_TOOL` | оба | — | `true` | Установите `false`/`0`, чтобы скрыть `mymeet_search_meetings`. |
 | `MYMEET_API_URL` | оба | — | `https://backend.mymeet.ai` | Переопределить базовый URL бэкенда (dev/staging). |
 | `PORT` | http | — | `3000` | Порт HTTP-сервера (Railway задаёт автоматически). |
+| `MYMEET_OAUTH_ISSUER` | http | — | — | URL OAuth-издателя. Задаётся вместе с `MYMEET_OAUTH_AUDIENCE`, чтобы принимать OAuth JWT наряду с api-ключами. |
+| `MYMEET_OAUTH_AUDIENCE` | http | — | — | OAuth audience для валидации JWT access-токенов. |
+| `MYMEET_SERVICE_SECRET` | http | — | — | Общий секрет, которому доверяет бэкенд для OAuth-запросов (отправляется как `X-Service-Secret`). Обязателен, когда включён OAuth. |
 
-> **Авторизация:** в stdio-режиме ключ берётся из `MYMEET_API_KEY`. В HTTP-режиме каждый запрос несёт собственный ключ в `Authorization: Bearer …` — **fallback на ключ из окружения в HTTP-режиме отсутствует**, каждый клиент передаёт свой ключ.
+> **Авторизация:** в stdio-режиме ключ берётся из `MYMEET_API_KEY`. В HTTP-режиме каждый запрос несёт собственный ключ в `Authorization: Bearer …` — **fallback на ключ из окружения в HTTP-режиме отсутствует**, каждый клиент передаёт свой ключ. В любом случае к бэкенду MyMeet сервер аутентифицируется заголовком `X-API-KEY`.
 
 ---
 
