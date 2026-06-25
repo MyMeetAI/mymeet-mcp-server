@@ -1,226 +1,221 @@
-/**
- * MyMeet API Client.
- *
- * - Native fetch (no axios — zero extra dependencies)
- * - AbortController timeout (15s) on every request
- * - Exponential backoff retry (3 attempts) for 429/5xx
- * - Typed errors with LLM-friendly suggestions
- */
-import { logger } from './logger.js';
-import {
-  AuthError,
-  NotFoundError,
-  RateLimitError,
-  ApiError,
-} from './errors.js';
-import type { Format, MeetingScope, Source, Template } from './types.js';
+import { logger } from './logger.js'
+import { AuthError, NotFoundError, RateLimitError, ApiError } from './errors.js'
+import type { Format, MeetingScope, Source, Template } from './types.js'
 
-const DEFAULT_BASE_URL = 'https://backend.mymeet.ai';
-const REQUEST_TIMEOUT_MS = 15_000;
-const MAX_RETRIES = 3;
-const RETRY_DELAYS = [1_000, 2_000, 4_000]; // exponential backoff
+const DEFAULT_BASE_URL = 'https://backend.mymeet.ai'
+const REQUEST_TIMEOUT_MS = 15_000
+const MAX_RETRIES = 3
+const RETRY_DELAYS = [1_000, 2_000, 4_000] // exponential backoff
 
 export type Credential =
-  | { kind: 'apikey'; apiKey: string }
-  | { kind: 'oauth'; email: string };
+	| { kind: 'apikey'; apiKey: string }
+	| { kind: 'oauth'; email: string }
 
 export class MyMeetApiClient {
-  private credential: Credential;
-  private serviceSecret: string;
-  private baseUrl: string;
+	private credential: Credential
+	private serviceSecret: string
+	private baseUrl: string
 
-  constructor(credential: Credential | string, baseUrl = DEFAULT_BASE_URL) {
-    this.credential =
-      typeof credential === 'string' ? { kind: 'apikey', apiKey: credential } : credential;
-    this.serviceSecret = process.env.MYMEET_SERVICE_SECRET ?? '';
-    // Fail closed: never send an empty X-Service-Secret to the backend.
-    if (this.credential.kind === 'oauth' && !this.serviceSecret) {
-      throw new Error('MYMEET_SERVICE_SECRET is required for OAuth credentials');
-    }
-    this.baseUrl = baseUrl.replace(/\/$/, '');
-  }
+	constructor(credential: Credential | string, baseUrl = DEFAULT_BASE_URL) {
+		this.credential =
+			typeof credential === 'string'
+				? { kind: 'apikey', apiKey: credential }
+				: credential
+		this.serviceSecret = process.env.MYMEET_SERVICE_SECRET ?? ''
+		if (this.credential.kind === 'oauth' && !this.serviceSecret) {
+			throw new Error('MYMEET_SERVICE_SECRET is required for OAuth credentials')
+		}
+		this.baseUrl = baseUrl.replace(/\/$/, '')
+	}
 
-  // ── Internal ──────────────────────────────────────────────────────────────
+	private async request<T>(
+		method: string,
+		path: string,
+		body?: Record<string, unknown>,
+		attempt = 0,
+	): Promise<T> {
+		const url = new URL(path, this.baseUrl)
 
-  private async request<T>(
-    method: string,
-    path: string,
-    body?: Record<string, unknown>,
-    attempt = 0,
-  ): Promise<T> {
-    const url = new URL(path, this.baseUrl);
+		const controller = new AbortController()
+		const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+		const headers: Record<string, string> =
+			this.credential.kind === 'apikey'
+				? { 'X-API-KEY': this.credential.apiKey }
+				: {
+						'X-Service-Secret': this.serviceSecret,
+						'X-User-Email': this.credential.email,
+					}
+		if (body) headers['Content-Type'] = 'application/json'
 
-    // Credentials travel in headers (never the URL) so they don't leak into logs.
-    // api key → X-API-KEY (legacy); OAuth → trusted service secret + the verified email.
-    const headers: Record<string, string> =
-      this.credential.kind === 'apikey'
-        ? { 'X-API-KEY': this.credential.apiKey }
-        : { 'X-Service-Secret': this.serviceSecret, 'X-User-Email': this.credential.email };
-    if (body) headers['Content-Type'] = 'application/json';
+		try {
+			logger.debug(`${method} ${path}`, { attempt })
 
-    try {
-      logger.debug(`${method} ${path}`, { attempt });
+			const response = await fetch(url.toString(), {
+				method,
+				headers,
+				body: body ? JSON.stringify(body) : undefined,
+				signal: controller.signal,
+			})
 
-      const response = await fetch(url.toString(), {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
+			if (!response.ok) {
+				const text = await response.text().catch(() => '')
 
-      if (!response.ok) {
-        const text = await response.text().catch(() => '');
+				if (response.status === 401) {
+					throw new AuthError()
+				}
 
-        // Auth error — no retry
-        if (response.status === 401) {
-          throw new AuthError();
-        }
+				if (response.status === 404) {
+					const idMatch = path.match(/meeting(?:Id)?[=/]([^/?&]+)/i)
+					throw new NotFoundError(idMatch?.[1] ?? 'unknown')
+				}
 
-        // Not found — no retry
-        if (response.status === 404) {
-          // Extract meetingId from path for better error message
-          const idMatch = path.match(/meeting(?:Id)?[=/]([^/?&]+)/i);
-          throw new NotFoundError(idMatch?.[1] ?? 'unknown');
-        }
+				if (
+					(response.status === 429 || response.status >= 500) &&
+					attempt < MAX_RETRIES
+				) {
+					const delay = RETRY_DELAYS[attempt] ?? 4_000
+					logger.warn(`Retrying ${method} ${path} after ${delay}ms`, {
+						status: response.status,
+						attempt: attempt + 1,
+					})
+					await new Promise(resolve => setTimeout(resolve, delay))
+					return this.request<T>(method, path, body, attempt + 1)
+				}
 
-        // Rate limit or server error — retry with backoff
-        if (
-          (response.status === 429 || response.status >= 500) &&
-          attempt < MAX_RETRIES
-        ) {
-          const delay = RETRY_DELAYS[attempt] ?? 4_000;
-          logger.warn(`Retrying ${method} ${path} after ${delay}ms`, {
-            status: response.status,
-            attempt: attempt + 1,
-          });
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          return this.request<T>(method, path, body, attempt + 1);
-        }
+				if (response.status === 429) {
+					throw new RateLimitError()
+				}
 
-        if (response.status === 429) {
-          throw new RateLimitError();
-        }
+				throw new ApiError(response.status, text)
+			}
 
-        throw new ApiError(response.status, text);
-      }
+			const text = await response.text()
+			// Some endpoints legitimately return an empty body (e.g. DELETE) → null.
+			// Callers that wrap the result handle this explicitly.
+			if (!text) return null as T
+			try {
+				return JSON.parse(text) as T
+			} catch {
+				// Some endpoints return plain text, not JSON:
+				// /api/meeting/status → "processed", rename/delete → "OK".
+				// Return the raw body instead of throwing a JSON parse error.
+				return text as T
+			}
+		} catch (error) {
+			if (error instanceof DOMException && error.name === 'AbortError') {
+				if (attempt < MAX_RETRIES) {
+					const delay = RETRY_DELAYS[attempt] ?? 4_000
+					logger.warn(`Timeout on ${method} ${path}, retrying after ${delay}ms`)
+					await new Promise(resolve => setTimeout(resolve, delay))
+					return this.request<T>(method, path, body, attempt + 1)
+				}
+				throw new ApiError(0, `Request timeout after ${REQUEST_TIMEOUT_MS}ms`)
+			}
+			throw error
+		} finally {
+			clearTimeout(timeout)
+		}
+	}
 
-      const text = await response.text();
-      if (!text) return null as T;
-      return JSON.parse(text) as T;
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        if (attempt < MAX_RETRIES) {
-          const delay = RETRY_DELAYS[attempt] ?? 4_000;
-          logger.warn(`Timeout on ${method} ${path}, retrying after ${delay}ms`);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          return this.request<T>(method, path, body, attempt + 1);
-        }
-        throw new ApiError(0, `Request timeout after ${REQUEST_TIMEOUT_MS}ms`);
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
+	async listMeetings(
+		page = 1,
+		perPage = 20,
+		scope: MeetingScope = 'mine',
+	): Promise<unknown> {
+		const backendPage = Math.max(0, page - 1)
+		const path =
+			scope === 'workspace'
+				? '/api/workspaces/active/all-meetings'
+				: '/api/workspaces/active/user-meetings'
+		const params = new URLSearchParams({
+			page: String(backendPage),
+			perPage: String(perPage),
+		})
 
-  // ── Public API ────────────────────────────────────────────────────────────
+		return this.request('GET', `${path}?${params.toString()}`)
+	}
 
-  async listMeetings(page = 1, perPage = 20, scope: MeetingScope = 'mine'): Promise<unknown> {
-    const backendPage = Math.max(0, page - 1);
-    const path = scope === 'workspace'
-      ? '/api/workspaces/active/all-meetings'
-      : '/api/workspaces/active/user-meetings';
-    const params = new URLSearchParams({
-      page: String(backendPage),
-      perPage: String(perPage),
-    });
+	async getMeetingStatus(meetingId: string): Promise<unknown> {
+		return this.request('GET', `/api/meeting/status?meeting_id=${meetingId}`)
+	}
 
-    return this.request(
-      'GET',
-      `${path}?${params.toString()}`,
-    );
-  }
+	async getMeetingReport(meetingId: string): Promise<unknown> {
+		return this.request('GET', `/api/video/report?meeting_id=${meetingId}`)
+	}
 
-  async getMeetingStatus(meetingId: string): Promise<unknown> {
-    return this.request('GET', `/api/meeting/status?meeting_id=${meetingId}`);
-  }
+	async downloadMeeting(meetingId: string, format: Format): Promise<unknown> {
+		return this.request(
+			'GET',
+			`/api/storage/download?meeting_id=${meetingId}&format=${format}`,
+		)
+	}
 
-  async getMeetingReport(meetingId: string): Promise<unknown> {
-    return this.request('GET', `/api/video/report?meeting_id=${meetingId}`);
-  }
+	async recordMeeting(params: {
+		link: string
+		title: string
+		dateTime: string
+		template: Template
+		source?: Source
+		password?: string
+		cron?: string
+		participants?: string[]
+	}): Promise<unknown> {
+		return this.request('POST', '/api/record-meeting', {
+			link: params.link,
+			title: params.title,
+			local_date_time: params.dateTime,
+			template_name: params.template,
+			source: params.source ?? this.detectSource(params.link),
+			meeting_password: params.password,
+			cron: params.cron,
+			participants: params.participants,
+		})
+	}
 
-  async downloadMeeting(meetingId: string, format: Format): Promise<unknown> {
-    return this.request(
-      'GET',
-      `/api/storage/download?meeting_id=${meetingId}&format=${format}`,
-    );
-  }
+	async renameMeeting(meetingId: string, name: string): Promise<unknown> {
+		return this.request('PUT', '/api/meeting', {
+			meeting_id: meetingId,
+			new_name: name,
+		})
+	}
 
-  async recordMeeting(params: {
-    link: string;
-    title: string;
-    dateTime: string;
-    template: Template;
-    source?: Source;
-    password?: string;
-    cron?: string;
-    participants?: string[];
-  }): Promise<unknown> {
-    return this.request('POST', '/api/record-meeting', {
-      link: params.link,
-      title: params.title,
-      local_date_time: params.dateTime,
-      template_name: params.template,
-      source: params.source ?? this.detectSource(params.link),
-      meeting_password: params.password,
-      cron: params.cron,
-      participants: params.participants,
-    });
-  }
+	async regenerateTemplate(
+		meetingId: string,
+		template: Template,
+	): Promise<unknown> {
+		return this.request('POST', '/api/generate-new-template', {
+			meeting_id: meetingId,
+			new_template_name: template,
+		})
+	}
 
-  async renameMeeting(meetingId: string, name: string): Promise<unknown> {
-    return this.request('PUT', '/api/meeting', {
-      meeting_id: meetingId,
-      new_name: name,
-    });
-  }
+	async updateSummary(
+		meetingId: string,
+		summary: Record<string, unknown>,
+	): Promise<unknown> {
+		return this.request('PUT', `/api/meeting/${meetingId}/summary`, summary)
+	}
 
-  async regenerateTemplate(
-    meetingId: string,
-    template: Template,
-  ): Promise<unknown> {
-    return this.request('POST', '/api/generate-new-template', {
-      meeting_id: meetingId,
-      new_template_name: template,
-    });
-  }
+	async deleteMeeting(meetingId: string): Promise<unknown> {
+		return this.request('DELETE', `/api/delete-meeting?meeting_id=${meetingId}`)
+	}
 
-  async updateSummary(
-    meetingId: string,
-    summary: Record<string, unknown>,
-  ): Promise<unknown> {
-    return this.request('PUT', `/api/meeting/${meetingId}/summary`, summary);
-  }
-
-  async deleteMeeting(meetingId: string): Promise<unknown> {
-    return this.request('DELETE', `/api/delete-meeting?meeting_id=${meetingId}`);
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  private detectSource(url: string): string {
-    const lower = url.toLowerCase();
-    if (lower.includes('meet.google.com')) return 'gmeet';
-    if (lower.includes('zoom.us') || lower.includes('zoom.com')) return 'zoom';
-    if (lower.includes('teams.microsoft.com') || lower.includes('teams.live.com')) return 'teams';
-    if (lower.includes('telemost.yandex')) return 'telemost';
-    if (lower.includes('jazz.sber') || lower.includes('salute.online')) return 'sberjazz';
-    if (lower.includes('trueconf.')) return 'trueconf';
-    if (lower.includes('konturtalk.')) return 'konturtalk';
-    if (lower.includes('jitsi') || lower.includes('meet.jit.si')) return 'jitsi';
-    return 'gmeet'; // fallback
-  }
+	private detectSource(url: string): string {
+		const lower = url.toLowerCase()
+		if (lower.includes('meet.google.com')) return 'gmeet'
+		if (lower.includes('zoom.us') || lower.includes('zoom.com')) return 'zoom'
+		if (
+			lower.includes('teams.microsoft.com') ||
+			lower.includes('teams.live.com')
+		)
+			return 'teams'
+		if (lower.includes('telemost.yandex')) return 'telemost'
+		if (lower.includes('jazz.sber') || lower.includes('salute.online'))
+			return 'sberjazz'
+		if (lower.includes('trueconf.')) return 'trueconf'
+		if (lower.includes('konturtalk.')) return 'konturtalk'
+		if (lower.includes('jitsi') || lower.includes('meet.jit.si')) return 'jitsi'
+		return 'gmeet' // fallback
+	}
 }

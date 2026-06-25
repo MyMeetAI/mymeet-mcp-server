@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { MyMeetApiClient } from '../client.js';
 import { MeetingIdSchema } from '../types.js';
 import { formatToolError } from '../errors.js';
+import { stripTranscript } from '../followup.js';
 
 export function registerGetMeetingReport(server: McpServer, client: MyMeetApiClient): void {
   server.tool(
@@ -10,23 +11,11 @@ export function registerGetMeetingReport(server: McpServer, client: MyMeetApiCli
     MeetingIdSchema.shape,
     async ({ meetingId }) => {
       try {
-        const result = await client.getMeetingReport(meetingId) as Record<string, unknown>;
-
-        // Strip transcript to avoid 25K token limit — use mymeet_get_transcript instead
-        if (result && typeof result === 'object') {
-          const { transcript, ...reportWithoutTranscript } = result;
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(reportWithoutTranscript, null, 2),
-              },
-            ],
-          };
-        }
+        const result = await client.getMeetingReport(meetingId);
+        const report = stripTranscript(result);
 
         return {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          content: [{ type: 'text', text: JSON.stringify(report, null, 2) }],
         };
       } catch (error) {
         return formatToolError(error);
