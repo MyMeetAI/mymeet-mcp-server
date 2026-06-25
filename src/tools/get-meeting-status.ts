@@ -11,7 +11,12 @@ export function registerGetMeetingStatus(server: McpServer, client: MyMeetApiCli
     async ({ meetingId }) => {
       try {
         const result = await client.getMeetingStatus(meetingId);
-        const payload = typeof result === 'string' ? { meetingId, status: result } : result;
+        // Status is a plain-text string (e.g. "processed"). An empty body becomes
+        // null in the client — fall back to an explicit value instead of "null".
+        const payload =
+          typeof result === 'string'
+            ? { meetingId, status: result }
+            : (result ?? { meetingId, status: 'unknown' });
         return {
           content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
         };

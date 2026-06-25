@@ -42,7 +42,7 @@ export function stripTranscript(report: unknown): unknown {
     ...record,
     chapters: record.chapters.map((chapter) => {
       if (!chapter || typeof chapter !== 'object') return chapter;
-      const { transcript, ...rest } = chapter as Record<string, unknown>;
+      const { transcript: _transcript, ...rest } = chapter as Record<string, unknown>;
       return rest;
     }),
   };

@@ -91,6 +91,8 @@ export class MyMeetApiClient {
 			}
 
 			const text = await response.text()
+			// Some endpoints legitimately return an empty body (e.g. DELETE) → null.
+			// Callers that wrap the result handle this explicitly.
 			if (!text) return null as T
 			try {
 				return JSON.parse(text) as T
