@@ -11,8 +11,9 @@ export function registerGetMeetingStatus(server: McpServer, client: MyMeetApiCli
     async ({ meetingId }) => {
       try {
         const result = await client.getMeetingStatus(meetingId);
+        const payload = typeof result === 'string' ? { meetingId, status: result } : result;
         return {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
         };
       } catch (error) {
         return formatToolError(error);

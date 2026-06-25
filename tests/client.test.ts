@@ -69,3 +69,36 @@ describe('MyMeetApiClient.listMeetings', () => {
     );
   });
 });
+
+describe('MyMeetApiClient.request — non-JSON responses', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it('returns a plain-text status body as-is instead of throwing a JSON parse error', async () => {
+    // Regression: /api/meeting/status returns the bare status string ("processed"),
+    // and JSON.parse("processed") used to throw `Unexpected token 'p'`.
+    const fetchMock = vi.fn(async () => new Response('processed', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MyMeetApiClient('test-api-key', 'https://backend.example');
+    await expect(client.getMeetingStatus('abc-123')).resolves.toBe('processed');
+  });
+
+  it('returns a plain-text "OK" body (rename/delete) without throwing', async () => {
+    const fetchMock = vi.fn(async () => new Response('OK', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MyMeetApiClient('test-api-key', 'https://backend.example');
+    await expect(client.renameMeeting('abc-123', 'New name')).resolves.toBe('OK');
+  });
+
+  it('still parses JSON bodies as objects', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ meetings: [], total: 0 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MyMeetApiClient('test-api-key', 'https://backend.example');
+    await expect(client.listMeetings()).resolves.toEqual({ meetings: [], total: 0 });
+  });
+});
