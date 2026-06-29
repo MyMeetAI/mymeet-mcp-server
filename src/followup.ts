@@ -16,7 +16,9 @@ function getReportBody(report: unknown): Record<string, unknown> | null {
   if (!report || typeof report !== 'object') return null;
   const r = report as Record<string, unknown>;
   return (
-    r.followup_v2 && typeof r.followup_v2 === 'object' ? r.followup_v2 : r
+    r.followup_v2 && typeof r.followup_v2 === 'object' && !Array.isArray(r.followup_v2)
+      ? r.followup_v2
+      : r
   ) as Record<string, unknown>;
 }
 
@@ -55,9 +57,9 @@ export function stripTranscript(report: unknown): unknown {
   });
 
   const record = report as Record<string, unknown>;
-  // Preserve the wrapper: when chapters live under followup_v2, replace them
-  // there and keep feedback / media_type siblings intact.
-  if (record.followup_v2 && typeof record.followup_v2 === 'object') {
+  // Preserve the wrapper: if getReportBody unwrapped followup_v2 (body !== record),
+  // replace chapters there and keep feedback / media_type siblings intact.
+  if (body !== record) {
     return {
       ...record,
       followup_v2: { ...(record.followup_v2 as Record<string, unknown>), chapters },

@@ -68,6 +68,18 @@ describe('buildTranscriptText', () => {
     const r = { followup_v2: { chapters: [{ transcript: [{ speaker: { speaker: 'Alice' }, text: 'No ts' }] }] } };
     expect(buildTranscriptText(r)).toBe('Alice: No ts');
   });
+
+  it('treats an array followup_v2 as absent and falls back to top-level chapters', () => {
+    // report is typed `unknown`; an array must not masquerade as the followup_v2
+    // wrapper (Array.isArray guard). Without the guard getReportBody would return
+    // the array and find no chapters on it, yielding an empty transcript.
+    const r = { followup_v2: [], chapters: report.followup_v2.chapters };
+    expect(buildTranscriptText(r)).toBe(
+      '[00:00] Alice: Hello everyone\n' +
+        '[00:05] Bob: Hi Alice\n' +
+        '[01:10] Alice: Let us discuss pricing',
+    );
+  });
 });
 
 describe('stripTranscript', () => {
