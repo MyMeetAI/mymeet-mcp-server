@@ -115,7 +115,7 @@ describe('MyMeetApiClient — request shapes match the backend contract', () => 
   }
 
   function lastCall(fetchMock: ReturnType<typeof vi.fn>) {
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls.at(-1)!;
     return {
       url: new URL(url as string),
       method: (init as RequestInit).method,
@@ -180,5 +180,39 @@ describe('MyMeetApiClient — request shapes match the backend contract', () => 
     expect(method).toBe('DELETE');
     expect(url.pathname).toBe('/api/video/report');
     expect(url.searchParams.get('meeting_id')).toBe('m-1');
+  });
+
+  it('percent-encodes a path-unsafe meetingId in the summary path segment', async () => {
+    // meetingId is a free-form string (z.string(), not a strict UUID), so a value
+    // containing "/" must not break out of the path segment.
+    const fetchMock = vi.fn(async () => okText());
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MyMeetApiClient('k', 'https://backend.example');
+    await client.updateSummary('a/b', {
+      templateId: 't-1',
+      entityName: 'Action Items',
+      newSummaryText: 'Updated text',
+    });
+
+    const { url } = lastCall(fetchMock);
+    expect(url.pathname).toBe('/api/meeting/a%2Fb/summary');
+  });
+});
+
+describe('MyMeetApiClient — NotFoundError surfaces the real meeting id on 404', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('extracts a snake_case meeting_id query param instead of reporting "unknown"', async () => {
+    // Regression: the 404 handler regex did not match `meeting_id=` (snake_case),
+    // so deleteMeeting / getMeetingStatus / getMeetingReport / downloadMeeting all
+    // raised NotFoundError("unknown") on a real 404.
+    const fetchMock = vi.fn(async () => new Response('Meeting not found', { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MyMeetApiClient('k', 'https://backend.example');
+    await expect(client.deleteMeeting('abc-123')).rejects.toThrow('Meeting "abc-123" not found');
   });
 });

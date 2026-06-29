@@ -66,7 +66,7 @@ export class MyMeetApiClient {
 				}
 
 				if (response.status === 404) {
-					const idMatch = path.match(/meeting(?:Id)?[=/]([^/?&]+)/i)
+					const idMatch = path.match(/meeting(?:Id|_id)?[=/]([^/?&]+)/i)
 					throw new NotFoundError(idMatch?.[1] ?? 'unknown')
 				}
 
@@ -137,17 +137,23 @@ export class MyMeetApiClient {
 	}
 
 	async getMeetingStatus(meetingId: string): Promise<unknown> {
-		return this.request('GET', `/api/meeting/status?meeting_id=${meetingId}`)
+		return this.request(
+			'GET',
+			`/api/meeting/status?meeting_id=${encodeURIComponent(meetingId)}`,
+		)
 	}
 
 	async getMeetingReport(meetingId: string): Promise<unknown> {
-		return this.request('GET', `/api/video/report?meeting_id=${meetingId}`)
+		return this.request(
+			'GET',
+			`/api/video/report?meeting_id=${encodeURIComponent(meetingId)}`,
+		)
 	}
 
 	async downloadMeeting(meetingId: string, format: Format): Promise<unknown> {
 		return this.request(
 			'GET',
-			`/api/storage/download?meeting_id=${meetingId}&format=${format}`,
+			`/api/storage/download?meeting_id=${encodeURIComponent(meetingId)}&format=${format}`,
 		)
 	}
 
@@ -194,7 +200,7 @@ export class MyMeetApiClient {
 		meetingId: string,
 		params: { templateId: string; entityName: string; newSummaryText: string },
 	): Promise<unknown> {
-		return this.request('PUT', `/api/meeting/${meetingId}/summary`, {
+		return this.request('PUT', `/api/meeting/${encodeURIComponent(meetingId)}/summary`, {
 			templateId: params.templateId,
 			entityName: params.entityName,
 			newSummaryText: params.newSummaryText,
@@ -204,7 +210,7 @@ export class MyMeetApiClient {
 	async deleteMeeting(meetingId: string): Promise<unknown> {
 		// Deletion is handled by the DELETE branch of /api/video/report —
 		// there is no separate /api/delete-meeting endpoint.
-		return this.request('DELETE', `/api/video/report?meeting_id=${meetingId}`)
+		return this.request('DELETE', `/api/video/report?meeting_id=${encodeURIComponent(meetingId)}`)
 	}
 
 	private detectSource(url: string): string {
