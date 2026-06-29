@@ -278,20 +278,23 @@ Re-analyze a processed meeting using a different template.
 
 ### mymeet_update_summary
 
-Edit AI-generated summary sections.
+Edit a single section of a meeting's AI-generated summary. The section is identified by the template it belongs to and its entity name (both come from `mymeet_get_meeting_report`).
 
 **Parameters:**
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `meetingId` | string | Yes | The unique meeting ID |
-| `summary` | object | Yes | Key-value pairs of sections to update |
+| `templateId` | string | Yes | ID of the template whose section to edit (from the meeting report) |
+| `entityName` | string | Yes | Name of the summary section/entity to update |
+| `newSummaryText` | string | Yes | New text for that section |
 
-**Example prompt:** "Update the action items in meeting X to include 'Schedule follow-up with legal team'"
+**Example prompt:** "Update the action items in meeting X to add 'Schedule follow-up with legal team'"
 
 **Edge cases:**
-- Unknown section keys: the API may ignore or reject them
-- Empty summary object: returns `ValidationError`
+- Unknown `templateId`: returns `404 Template not found`
+- Unknown `entityName`: returns `404 Entity not found`
+- Missing `templateId`: returns `400`
 
 ---
 

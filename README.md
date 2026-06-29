@@ -47,7 +47,7 @@ Both expose the **exact same tools** — choose whatever your client supports. U
 
 ## Option 1 — Local (npm, stdio)
 
-The server runs on your machine through `npx`; your API key lives in the client config and never leaves it. Requires **Node 18+**.
+The server runs on your machine through `npx`; your API key lives in the client config and is sent only to the MyMeet backend (as `X-API-KEY`) — never to any third party. Requires **Node 18+**.
 
 ### Claude Desktop
 
@@ -316,8 +316,11 @@ All configuration is via environment variables.
 | `MYMEET_ENABLE_SEARCH_TOOL` | both | — | `true` | Set to `false`/`0` to hide `mymeet_search_meetings`. |
 | `MYMEET_API_URL` | both | — | `https://backend.mymeet.ai` | Override the backend base URL (dev/staging). |
 | `PORT` | http | — | `3000` | HTTP listen port (Railway sets this automatically). |
+| `MYMEET_OAUTH_ISSUER` | http | — | — | OAuth issuer URL. Set together with `MYMEET_OAUTH_AUDIENCE` to accept OAuth JWTs alongside api keys. |
+| `MYMEET_OAUTH_AUDIENCE` | http | — | — | OAuth audience used to validate JWT access tokens. |
+| `MYMEET_SERVICE_SECRET` | http | — | — | Shared secret the backend trusts for OAuth-authenticated calls (sent as `X-Service-Secret`). Required when OAuth is enabled. |
 
-> **Auth:** In stdio mode the key comes from `MYMEET_API_KEY`. In HTTP mode each request carries its own API key in `Authorization: Bearer …` — there is **no env-key fallback in HTTP mode**, so every client presents its own key.
+> **Auth:** In stdio mode the key comes from `MYMEET_API_KEY`. In HTTP mode each request carries its own API key in `Authorization: Bearer …` — there is **no env-key fallback in HTTP mode**, so every client presents its own key. Whichever entry point is used, the server authenticates to the MyMeet backend with the `X-API-KEY` header.
 
 ---
 
