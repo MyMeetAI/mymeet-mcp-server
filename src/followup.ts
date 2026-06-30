@@ -22,6 +22,14 @@ function getReportBody(report: unknown): Record<string, unknown> | null {
   ) as Record<string, unknown>;
 }
 
+// The meeting status lives inside followup_v2 (backend sets followup["status"]).
+// Returns undefined when the body isn't a report object — e.g. the plain-text
+// "Meeting is in progress now" body returned (202) for a processing meeting.
+export function getReportStatus(report: unknown): string | undefined {
+  const status = getReportBody(report)?.status;
+  return typeof status === 'string' ? status : undefined;
+}
+
 function getChapters(report: unknown): Chapter[] {
   const chapters = getReportBody(report)?.chapters;
   return Array.isArray(chapters) ? (chapters as Chapter[]) : [];

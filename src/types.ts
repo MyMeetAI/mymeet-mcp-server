@@ -70,6 +70,18 @@ export type MeetingStatus = (typeof STATUSES)[number];
 
 export const StatusSchema = z.enum(STATUSES);
 
+/**
+ * `new` and `processed` are equivalent: the report is ready in both. A meeting
+ * starts as `new` and flips to `processed` on the first report fetch/open, so
+ * both must be treated as ready. queued/processing (and the backend's
+ * recording) mean not-ready; failed is a terminal error.
+ */
+export const READY_STATUSES = ['new', 'processed'] as const satisfies readonly MeetingStatus[];
+
+export function isReadyStatus(status: string | null | undefined): boolean {
+  return status != null && (READY_STATUSES as readonly string[]).includes(status);
+}
+
 // ── Meeting visibility scope ─────────────────────────────────────────────────
 
 export const MEETING_SCOPES = ['mine', 'workspace'] as const;

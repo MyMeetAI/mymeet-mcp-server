@@ -7,7 +7,7 @@ import { stripTranscript } from '../followup.js';
 export function registerGetMeetingReport(server: McpServer, client: MyMeetApiClient): void {
   server.tool(
     'mymeet_get_meeting_report',
-    'Get AI-generated summary for a processed meeting: key points, action items, decisions. Does NOT include full transcript — use mymeet_get_transcript for that.',
+    'Get the AI-generated summary for a ready meeting (status "new" or "processed" — both mean the report is ready): key points, action items, decisions. Does NOT include the full transcript — use mymeet_get_transcript for that.',
     MeetingIdSchema.shape,
     async ({ meetingId }) => {
       try {
