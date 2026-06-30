@@ -76,7 +76,7 @@ export const StatusSchema = z.enum(STATUSES);
  * both must be treated as ready. queued/processing (and the backend's
  * recording) mean not-ready; failed is a terminal error.
  */
-export const READY_STATUSES: readonly MeetingStatus[] = ['new', 'processed'];
+export const READY_STATUSES = ['new', 'processed'] as const satisfies readonly MeetingStatus[];
 
 export function isReadyStatus(status: string | null | undefined): boolean {
   return status != null && (READY_STATUSES as readonly string[]).includes(status);

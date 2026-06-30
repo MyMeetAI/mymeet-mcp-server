@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { isReadyStatus } from '../src/types.js';
 import { buildTranscriptText, getReportStatus } from '../src/followup.js';
-import { createServer } from '../src/server.js';
+import { buildTranscriptResult } from '../src/tools/get-transcript.js';
+import { buildStatusPayload } from '../src/tools/get-meeting-status.js';
 
 // A meeting starts as `new` and flips to `processed` on the first report
 // fetch/open — both mean the report is ready and the transcript is available.
@@ -13,7 +14,7 @@ describe('isReadyStatus', () => {
     expect(isReadyStatus('processed')).toBe(true);
   });
 
-  it('treats in-progress and unknown statuses as not ready', () => {
+  it('treats in-progress, failed and unknown statuses as not ready', () => {
     expect(isReadyStatus('queued')).toBe(false);
     expect(isReadyStatus('processing')).toBe(false);
     expect(isReadyStatus('failed')).toBe(false);
@@ -55,79 +56,76 @@ describe('buildTranscriptText — status is irrelevant to extraction', () => {
   });
 });
 
-function getTool(name: string) {
-  const server = createServer('test-api-key') as any;
-  return server._registeredTools[name];
-}
-
-describe('mymeet_get_transcript — empty transcript is status-aware', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
+describe('buildTranscriptResult — empty transcript is status-aware', () => {
+  it('returns the transcript text directly when present', () => {
+    const report = {
+      followup_v2: {
+        status: 'new',
+        chapters: [{ transcript: [{ speaker: { speaker: 'Alice' }, text: 'Hi', timestamp: '00:00' }] }],
+      },
+    };
+    expect(buildTranscriptResult(report).content[0].text).toBe('[00:00] Alice: Hi');
   });
 
-  it('does NOT claim "still processing" for a ready (new) meeting with no transcript text', async () => {
+  it('does NOT claim "not ready / processing" for a ready (new) meeting with no transcript text', () => {
     // Regression: a ready-but-empty meeting (audio with no speech, locked, etc.)
     // used to be reported as "may still be processing", so the model told the
     // user to keep waiting forever.
-    const fetchMock = vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
-            followup_v2: { status: 'new', chapters: [], is_transcript_empty: true },
-            feedback: false,
-            media_type: 'audio',
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-    );
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await getTool('mymeet_get_transcript').handler({ meetingId: 'm-1' }, {});
-    const payload = JSON.parse(result.content[0].text);
+    const report = {
+      followup_v2: { status: 'new', chapters: [], is_transcript_empty: true },
+      feedback: false,
+      media_type: 'audio',
+    };
+    const payload = JSON.parse(buildTranscriptResult(report).content[0].text);
 
     expect(payload.status).toBe('new');
-    expect(payload.message).not.toMatch(/processing/i);
+    expect(payload.message).toMatch(/ready but has no transcript/i);
+    expect(payload.message).not.toMatch(/not ready|processing/i);
     expect(payload.suggestion).toMatch(/mymeet_get_meeting_report|do not wait/i);
   });
 
-  it('still tells the model to poll when the meeting is genuinely processing', async () => {
-    // Backend returns the 202 plain-text "in progress" body for processing/recording.
-    const fetchMock = vi.fn(
-      async () => new Response('Meeting is in progress now, status: processing', { status: 202 }),
+  it('tells the model to poll when the meeting is genuinely not ready (202 plain text)', () => {
+    const payload = JSON.parse(
+      buildTranscriptResult('Meeting is in progress now, status: processing').content[0].text,
     );
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await getTool('mymeet_get_transcript').handler({ meetingId: 'm-1' }, {});
-    const payload = JSON.parse(result.content[0].text);
-
-    expect(payload.message).toMatch(/processing/i);
+    expect(payload.message).toMatch(/not ready/i);
+    expect(payload.status).toBe('processing');
     expect(payload.suggestion).toMatch(/mymeet_get_meeting_status/i);
+  });
+
+  it('does not mislabel a failed meeting as "processing"', () => {
+    // failed is not-ready, but the neutral wording must not call it "processing".
+    const report = { followup_v2: { status: 'failed', chapters: [] } };
+    const payload = JSON.parse(buildTranscriptResult(report).content[0].text);
+
+    expect(payload.status).toBe('failed');
+    expect(payload.message).not.toMatch(/processing/i);
   });
 });
 
-describe('mymeet_get_meeting_status — exposes a ready flag', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
+describe('buildStatusPayload — always includes a ready flag', () => {
+  it('marks new and processed as ready', () => {
+    expect(buildStatusPayload('m-1', 'new')).toEqual({ meetingId: 'm-1', status: 'new', ready: true });
+    expect(buildStatusPayload('m-1', 'processed')).toEqual({
+      meetingId: 'm-1',
+      status: 'processed',
+      ready: true,
+    });
   });
 
-  it('marks a `new` meeting as ready so the model does not treat it as in-progress', async () => {
-    const fetchMock = vi.fn(async () => new Response('new', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await getTool('mymeet_get_meeting_status').handler({ meetingId: 'm-1' }, {});
-    const payload = JSON.parse(result.content[0].text);
-
-    expect(payload.status).toBe('new');
-    expect(payload.ready).toBe(true);
+  it('marks processing/queued as not ready', () => {
+    expect(buildStatusPayload('m-1', 'processing').ready).toBe(false);
+    expect(buildStatusPayload('m-1', 'queued').ready).toBe(false);
   });
 
-  it('marks a processing meeting as not ready', async () => {
-    const fetchMock = vi.fn(async () => new Response('processing', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await getTool('mymeet_get_meeting_status').handler({ meetingId: 'm-1' }, {});
-    const payload = JSON.parse(result.content[0].text);
-
-    expect(payload.ready).toBe(false);
+  it('includes ready and a status even for object / empty / null responses (contract)', () => {
+    // Regression: a non-string (object) response used to pass through without `ready`.
+    expect(buildStatusPayload('m-1', { status: 'processing' })).toEqual({
+      meetingId: 'm-1',
+      status: 'processing',
+      ready: false,
+    });
+    expect(buildStatusPayload('m-1', null)).toEqual({ meetingId: 'm-1', status: 'unknown', ready: false });
+    expect(buildStatusPayload('m-1', '')).toEqual({ meetingId: 'm-1', status: 'unknown', ready: false });
   });
 });

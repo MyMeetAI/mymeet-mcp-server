@@ -3,6 +3,28 @@ import type { MyMeetApiClient } from '../client.js';
 import { MeetingIdSchema, isReadyStatus } from '../types.js';
 import { formatToolError } from '../errors.js';
 
+/**
+ * Normalize the status endpoint response into a stable payload.
+ *
+ * Pure (no server/client) so it can be unit-tested directly. `/api/meeting/status`
+ * returns a plain-text status string (e.g. "processed"); an empty body becomes
+ * null in the client, and a future JSON `{ status }` object is tolerated too.
+ * `ready` is ALWAYS present — the tool contract promises it.
+ */
+export function buildStatusPayload(
+  meetingId: string,
+  result: unknown,
+): { meetingId: string; status: string; ready: boolean } {
+  const objectStatus = (result as { status?: unknown } | null)?.status;
+  const status =
+    typeof result === 'string' && result
+      ? result
+      : typeof objectStatus === 'string'
+        ? objectStatus
+        : 'unknown';
+  return { meetingId, status, ready: isReadyStatus(status) };
+}
+
 export function registerGetMeetingStatus(server: McpServer, client: MyMeetApiClient): void {
   server.tool(
     'mymeet_get_meeting_status',
@@ -10,13 +32,7 @@ export function registerGetMeetingStatus(server: McpServer, client: MyMeetApiCli
     MeetingIdSchema.shape,
     async ({ meetingId }) => {
       try {
-        const result = await client.getMeetingStatus(meetingId);
-        // Status is a plain-text string (e.g. "processed"). An empty body becomes
-        // null in the client — fall back to an explicit value instead of "null".
-        const payload =
-          typeof result === 'string'
-            ? { meetingId, status: result, ready: isReadyStatus(result) }
-            : (result ?? { meetingId, status: 'unknown', ready: false });
+        const payload = buildStatusPayload(meetingId, await client.getMeetingStatus(meetingId));
         return {
           content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
         };
