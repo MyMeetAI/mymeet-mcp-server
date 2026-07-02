@@ -1,6 +1,6 @@
 {
   "name": "@mymeet/mcp-server",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "MCP server for MyMeet.ai — connect your AI assistant to your meetings",
   "license": "MIT",
   "type": "module",
