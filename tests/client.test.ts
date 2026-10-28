@@ -123,6 +123,50 @@ describe('MyMeetApiClient — request shapes match the backend contract', () => 
     };
   }
 
+  it.each([undefined, 'telemost'] as const)(
+    'records Telemost with the backend identifier when source is %s',
+    async (source) => {
+      const fetchMock = vi.fn(async () => okText());
+      vi.stubGlobal('fetch', fetchMock);
+
+      const client = new MyMeetApiClient('k', 'https://backend.example');
+      await client.recordMeeting({
+        link: 'https://telemost.yandex.ru/j/96081556964843',
+        title: 'Telemost meeting',
+        dateTime: '2026-10-28T08:06:00+03:00',
+        template: 'default-meeting',
+        source,
+      });
+
+      const { url, method, body } = lastCall(fetchMock);
+      expect(method).toBe('POST');
+      expect(url.pathname).toBe('/api/record-meeting');
+      expect(body).toEqual({
+        link: 'https://telemost.yandex.ru/j/96081556964843',
+        title: 'Telemost meeting',
+        local_date_time: '2026-10-28T08:06:00+03:00',
+        template_name: 'default-meeting',
+        source: 'yandextelemost',
+      });
+    },
+  );
+
+  it('preserves an explicit platform override for a Telemost URL', async () => {
+    const fetchMock = vi.fn(async () => okText());
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MyMeetApiClient('k', 'https://backend.example');
+    await client.recordMeeting({
+      link: 'https://telemost.yandex.ru/j/96081556964843',
+      title: 'Meeting',
+      dateTime: '2026-10-28T08:06:00+03:00',
+      template: 'default-meeting',
+      source: 'zoom',
+    });
+
+    expect(lastCall(fetchMock).body.source).toBe('zoom');
+  });
+
   it('rename sends camelCase meetingId/newName', async () => {
     const fetchMock = vi.fn(async () => okText());
     vi.stubGlobal('fetch', fetchMock);

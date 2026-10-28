@@ -167,12 +167,14 @@ export class MyMeetApiClient {
 		cron?: string
 		participants?: string[]
 	}): Promise<unknown> {
+		const source = params.source ?? this.detectSource(params.link)
 		return this.request('POST', '/api/record-meeting', {
 			link: params.link,
 			title: params.title,
 			local_date_time: params.dateTime,
 			template_name: params.template,
-			source: params.source ?? this.detectSource(params.link),
+			// Keep the public MCP alias, but send the backend's platform identifier.
+			source: source === 'telemost' ? 'yandextelemost' : source,
 			meeting_password: params.password,
 			cron: params.cron,
 			participants: params.participants,
