@@ -1,7 +1,7 @@
 /**
  * MyMeet MCP Server.
  *
- * Registers all 11 tools + templates resource.
+ * Registers meeting tools and the templates resource.
  * Supports STDIO (default) and HTTP transports.
  */
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -17,6 +17,7 @@ import { registerGetTranscript } from './tools/get-transcript.js';
 import { registerSearchMeetings } from './tools/search-meetings.js';
 import { registerDownloadMeeting } from './tools/download-meeting.js';
 import { registerRecordMeeting } from './tools/record-meeting.js';
+import { registerImportMedia } from './tools/import-media.js';
 import { registerRenameMeeting } from './tools/rename-meeting.js';
 import { registerRegenerateTemplate } from './tools/regenerate-template.js';
 import { registerUpdateSummary } from './tools/update-summary.js';
@@ -39,8 +40,6 @@ export function createServer(credential: Credential | string, baseUrl?: string):
 
   const client = new MyMeetApiClient(credential, baseUrl);
 
-  // ── Register all 11 tools ──────────────────────────────────────────────────
-
   logger.info('Registering tools...');
 
   // Read-only
@@ -55,6 +54,7 @@ export function createServer(credential: Credential | string, baseUrl?: string):
 
   // Write
   registerRecordMeeting(server, client);
+  registerImportMedia(server, client);
   registerRenameMeeting(server, client);
   registerRegenerateTemplate(server, client);
   registerUpdateSummary(server, client);
@@ -87,7 +87,7 @@ export function createServer(credential: Credential | string, baseUrl?: string):
     },
   );
 
-  logger.info(`Server ready: ${isSearchToolEnabled() ? 11 : 10} tools + templates resource`);
+  logger.info('Server ready');
 
   return server;
 }
