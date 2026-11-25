@@ -169,9 +169,9 @@ export const RecordMeetingSchema = z.object({
 });
 
 export const ImportMediaSchema = z.object({
-  url: z.string().trim().url().max(4096).describe(
-    'Public HTTPS link to one YouTube video, Yandex Disk file, or Google Drive file',
-  ),
+  url: z.string().trim().url().max(4096)
+    .regex(/^https:\/\//i, 'URL must use HTTPS')
+    .describe('Public HTTPS link to one YouTube video, Yandex Disk file, or Google Drive file'),
   templateName: z.string().trim().min(1).max(200).optional().describe(
     'Analysis template name. Omit to use the default in the selected workspace',
   ),

@@ -52,7 +52,7 @@ it('marks import as a write action and status as read-only', async () => {
 describe('mymeet_import_media', () => {
   it.each([
     [youtubeUrl, 'youtube'],
-    ['https://disk.yandex.ru/d/example', 'yandex_disk'],
+    ['HTTPS://disk.yandex.ru/d/example', 'yandex_disk'],
     ['https://drive.google.com/file/d/exampleDrive123/view', 'google_drive'],
   ])('uses the shared import for %s', async (url, source) => {
     fetchBackend.mockResolvedValueOnce(jsonResponse({ meeting_id: meetingId, source, status: 'processing' }, { status: 202 }));
@@ -69,6 +69,23 @@ describe('mymeet_import_media', () => {
     expect(new Headers(request.headers).get('Idempotency-Key')).toBe(requestId);
     expect(new Headers(request.headers).get('X-API-KEY')).toBe('test-api-key');
     expect(request.body).toBe(JSON.stringify({ url, template_name: 'lecture-notes', speakers_number: 2 }));
+  });
+
+  it('rejects a non-HTTPS recording link before submission', async () => {
+    fetchBackend.mockResolvedValueOnce(jsonResponse(
+      { meeting_id: meetingId, source: 'youtube', status: 'processing' }, { status: 202 },
+    ));
+
+    const result = await client.callTool({
+      name: 'mymeet_import_media',
+      arguments: { url: 'http://www.youtube.com/watch?v=abcdefghijk' },
+    });
+
+    expect(result).toMatchObject({
+      isError: true,
+      content: [{ type: 'text', text: expect.stringContaining('URL must use HTTPS') }],
+    });
+    expect(fetchBackend).not.toHaveBeenCalled();
   });
 
   it('keeps the generated request ID when retrying a gateway failure', async () => {
@@ -157,6 +174,25 @@ describe('mymeet_get_meeting_status', () => {
     });
   });
 
+  it('preserves the import phase when processing progress is 0%', async () => {
+    fetchBackend.mockResolvedValueOnce(jsonResponse({
+      statuses: { [meetingId]: {
+        status: 'processing',
+        media_import: { phase: 'processing', processing_percentage: 0 },
+      } },
+    }));
+
+    expect(await callTool('mymeet_get_meeting_status', { meetingId })).toEqual({
+      error: false,
+      payload: {
+        meetingId,
+        status: 'processing',
+        ready: false,
+        mediaImport: { phase: 'processing', processingPercentage: 0 },
+      },
+    });
+  });
+
   it('reports a cancelled import as unavailable even if it was previously processed', async () => {
     fetchBackend.mockResolvedValueOnce(jsonResponse({
       statuses: { [meetingId]: { status: 'processed', media_import: { phase: 'cancelled' } } },
@@ -176,6 +212,15 @@ describe('mymeet_get_meeting_status', () => {
     expect(await callTool('mymeet_get_meeting_status', { meetingId })).toMatchObject({
       error: true,
       payload: { error: errorName },
+    });
+  });
+
+  it('surfaces a backend error if the batch omits the requested meeting', async () => {
+    fetchBackend.mockResolvedValueOnce(jsonResponse({ statuses: {} }));
+
+    expect(await callTool('mymeet_get_meeting_status', { meetingId })).toMatchObject({
+      error: true,
+      payload: { error: 'ApiError', message: 'MyMeet API error 502: Incomplete meeting status response.' },
     });
   });
 

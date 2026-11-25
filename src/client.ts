@@ -171,7 +171,11 @@ export class MyMeetApiClient {
 		)
 		const batch = MeetingStatusBatchSchema.safeParse(response)
 		if (!batch.success) return response
-		return Object.hasOwn(batch.data.statuses, meetingId) ? batch.data.statuses[meetingId] : null
+		const { statuses } = batch.data
+		if (!Object.hasOwn(statuses, meetingId)) {
+			throw new ApiError(502, 'Incomplete meeting status response.')
+		}
+		return statuses[meetingId]
 	}
 
 	async getMeetingReport(meetingId: string): Promise<unknown> {

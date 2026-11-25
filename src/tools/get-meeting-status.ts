@@ -17,7 +17,7 @@ const MediaImportStatusSchema = z.object({
   total_bytes: z.number().finite().nonnegative().optional(),
   generation: z.number().int().positive().optional(),
   attempt: z.number().int().nonnegative().optional(),
-  processing_percentage: z.number().int().min(1).max(100).optional(),
+  processing_percentage: z.number().int().min(0).max(100).optional(),
 }).transform((state) => ({
   phase: state.phase,
   error: state.error,
