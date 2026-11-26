@@ -91,6 +91,8 @@ const importSuggestions: Readonly<Record<string, string>> = {
   import_limit_reached: 'Wait for an active import to finish before starting another.',
   rate_limit_exceeded: 'Wait before retrying with the same request ID.',
   provider_unavailable: 'The provider is currently unavailable. Try again later with the same request ID.',
+  import_request_uncertain: 'The import may already have started. ' +
+    'Retry with the same request ID and settings in the same MyMeet workspace to avoid creating another meeting.',
 };
 
 export class MediaImportError extends MyMeetError {

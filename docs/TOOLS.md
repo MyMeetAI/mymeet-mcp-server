@@ -63,6 +63,8 @@ For link imports, call this tool with the `meetingId` from `mymeet_import_media`
 
 When available, `mediaImport` includes `downloadedBytes`, `totalBytes`, `processingPercentage`, `generation`, `attempt`, or an `error` with `code` and `retryable`.
 
+`parseError: true` means the server could not read the full status response. Check again before reporting completion. If the meeting status itself is unreadable, the tool returns `status: "unknown"` and `ready: false`.
+
 ```json
 {
   "meetingId": "9cd6d0a0-67ea-4a97-8aa2-590ad41350e6",
@@ -275,7 +277,7 @@ Import a recording from a public YouTube, Yandex Disk, or Google Drive link. Sup
 
 The response confirms that MyMeet accepted the import. Use [`mymeet_get_meeting_status`](#mymeet_get_meeting_status) with the returned ID, then fetch the transcript and any report available on the workspace plan. Possible sources are `youtube`, `yandex_disk`, and `google_drive`.
 
-Admission errors include `code` and `requestId`. For `import_request_uncertain`, reuse the returned ID and original parameters to avoid creating a second meeting. For an admitted import that later fails, read `mediaImport.error` in the status response.
+Admission errors include `code` and `requestId`. If you get `import_request_uncertain`, the import may already have started. Retry with the returned ID and the original parameters in the same MyMeet workspace. If processing fails after the import is accepted, read `mediaImport.error` in the status response.
 
 ---
 

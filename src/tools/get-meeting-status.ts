@@ -36,7 +36,7 @@ export function buildStatusPayload(meetingId: string, result: unknown) {
   }
 
   const entry = StatusEntrySchema.safeParse(typeof result === 'string' ? { status: result } : result);
-  if (!entry.success) return { meetingId, status: 'unknown', ready: false };
+  if (!entry.success) return { meetingId, status: 'unknown', ready: false, parseError: true };
 
   const { status, reason, media_import } = entry.data;
   const importState = MediaImportStatusSchema.safeParse(media_import);
@@ -46,6 +46,7 @@ export function buildStatusPayload(meetingId: string, result: unknown) {
     status: reason ? `${status}: ${reason}` : status,
     ready: mediaImport?.phase !== 'cancelled' && isReadyStatus(status),
     ...(mediaImport && { mediaImport }),
+    ...(media_import != null && !importState.success && { parseError: true }),
   };
 }
 
@@ -57,7 +58,8 @@ export function registerGetMeetingStatus(server: McpServer, client: MyMeetApiCli
         'Check processing status of a meeting. `ready` means this meeting or part is available (`new` or `processed`). ' +
         'For a linked recording, use `mediaImport.phase` with the original import meeting ID. ' +
         'Check again until `completed`, `failed`, or `cancelled`. ' +
-        'If the phase is `failed`, report `mediaImport.error.code` and whether it is retryable.',
+        'If the phase is `failed`, report `mediaImport.error.code` and whether it is retryable. ' +
+        '`parseError: true` means some or all of the status could not be read. Check again before reporting completion.',
       inputSchema: MeetingIdSchema.shape,
       annotations: { readOnlyHint: true },
     },

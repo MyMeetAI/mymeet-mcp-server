@@ -227,8 +227,11 @@ export class MyMeetApiClient {
 			const transportFailed = error instanceof TypeError
 			const responseUnconfirmed =
 				error instanceof ApiError && (error.statusCode === 0 || (error.statusCode ?? 0) >= 500)
-			if (!transportFailed && !responseUnconfirmed) throw error
-			throw new MediaImportError('import_request_uncertain', 'The import request could not be confirmed.', 0, requestId)
+			if (transportFailed || responseUnconfirmed) {
+				throw new MediaImportError('import_request_uncertain', 'The import request could not be confirmed.', 0, requestId)
+			}
+			// Preserve the backend code and request ID on typed import rejections.
+			throw error
 		}
 		const accepted = ImportAcceptedSchema.safeParse(response)
 		if (!accepted.success) {

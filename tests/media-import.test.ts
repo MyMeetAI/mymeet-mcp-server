@@ -128,12 +128,17 @@ describe('mymeet_import_media', () => {
     });
   });
 
-  it('returns the request ID if the outcome is uncertain', async () => {
+  it('explains how to retry an unconfirmed import safely', async () => {
     fetchBackend.mockRejectedValueOnce(new TypeError('fetch failed'));
 
     expect(await callTool('mymeet_import_media', { url: youtubeUrl, requestId })).toMatchObject({
       error: true,
-      payload: { code: 'import_request_uncertain', requestId },
+      payload: {
+        code: 'import_request_uncertain',
+        requestId,
+        suggestion: 'The import may already have started. ' +
+          'Retry with the same request ID and settings in the same MyMeet workspace to avoid creating another meeting.',
+      },
     });
   });
 });
@@ -221,6 +226,18 @@ describe('mymeet_get_meeting_status', () => {
     expect(await callTool('mymeet_get_meeting_status', { meetingId })).toMatchObject({
       error: true,
       payload: { error: 'ApiError', message: 'MyMeet API error 502: Incomplete meeting status response.' },
+    });
+  });
+
+  it.each([
+    [{ status: 42 }, { status: 'unknown', ready: false }],
+    [{ status: 'processed', media_import: { processing_percentage: 42 } }, { status: 'processed', ready: true }],
+  ])('flags an unreadable status response %#', async (entry, expected) => {
+    fetchBackend.mockResolvedValueOnce(jsonResponse({ statuses: { [meetingId]: entry } }));
+
+    expect(await callTool('mymeet_get_meeting_status', { meetingId })).toEqual({
+      error: false,
+      payload: { meetingId, ...expected, parseError: true },
     });
   });
 

@@ -125,7 +125,8 @@ describe('buildStatusPayload — always includes a ready flag', () => {
       status: 'processing',
       ready: false,
     });
-    expect(buildStatusPayload('m-1', null)).toEqual({ meetingId: 'm-1', status: 'unknown', ready: false });
-    expect(buildStatusPayload('m-1', '')).toEqual({ meetingId: 'm-1', status: 'unknown', ready: false });
+    const emptyStatus = { meetingId: 'm-1', status: 'unknown', ready: false, parseError: true };
+    expect(buildStatusPayload('m-1', null)).toEqual(emptyStatus);
+    expect(buildStatusPayload('m-1', '')).toEqual(emptyStatus);
   });
 });
