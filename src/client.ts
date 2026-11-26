@@ -1,11 +1,33 @@
+import { randomUUID } from 'node:crypto'
+import { z } from 'zod'
 import { logger } from './logger.js'
-import { AuthError, NotFoundError, RateLimitError, ApiError } from './errors.js'
-import type { Format, MeetingScope, Source, Template } from './types.js'
+import { AuthError, NotFoundError, RateLimitError, ApiError, MediaImportError } from './errors.js'
+import type { Format, ImportMediaInput, MeetingScope, Source, Template } from './types.js'
 
 const DEFAULT_BASE_URL = 'https://backend.mymeet.ai'
 const REQUEST_TIMEOUT_MS = 15_000
 const MAX_RETRIES = 3
 const RETRY_DELAYS = [1_000, 2_000, 4_000] // exponential backoff
+
+const MeetingStatusBatchSchema = z.object({ statuses: z.record(z.unknown()) })
+const ImportAcceptedSchema = z.object({
+	meeting_id: z.string().min(1),
+	source: z.enum(['youtube', 'yandex_disk', 'google_drive']),
+	status: z.string().min(1),
+})
+const ImportRejectionSchema = z.object({
+	code: z.string().min(1).optional(),
+	message: z.string().min(1),
+})
+
+function parseBody(text: string): unknown {
+	if (!text) return null
+	try {
+		return JSON.parse(text)
+	} catch {
+		return text
+	}
+}
 
 export type Credential =
 	| { kind: 'apikey'; apiKey: string }
@@ -28,12 +50,13 @@ export class MyMeetApiClient {
 		this.baseUrl = baseUrl.replace(/\/$/, '')
 	}
 
-	private async request<T>(
+	private async request(
 		method: string,
 		path: string,
 		body?: Record<string, unknown>,
+		idempotencyKey?: string,
 		attempt = 0,
-	): Promise<T> {
+	): Promise<unknown> {
 		const url = new URL(path, this.baseUrl)
 
 		const controller = new AbortController()
@@ -47,6 +70,7 @@ export class MyMeetApiClient {
 						'X-User-Email': this.credential.email,
 					}
 		if (body) headers['Content-Type'] = 'application/json'
+		if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey
 
 		try {
 			logger.debug(`${method} ${path}`, { attempt })
@@ -61,12 +85,27 @@ export class MyMeetApiClient {
 			if (!response.ok) {
 				const text = await response.text().catch(() => '')
 
+				if (idempotencyKey) {
+					const rejection = ImportRejectionSchema.safeParse(parseBody(text))
+					if (rejection.success && (rejection.data.code || response.status === 403)) {
+						throw new MediaImportError(
+							rejection.data.code ?? 'forbidden',
+							rejection.data.message,
+							response.status,
+							idempotencyKey,
+						)
+					}
+					if (response.status === 429) {
+						throw new MediaImportError('rate_limit_exceeded', 'Too many import requests.', 429, idempotencyKey)
+					}
+				}
+
 				if (response.status === 401) {
 					throw new AuthError()
 				}
 
 				if (response.status === 404) {
-					const idMatch = path.match(/meeting(?:Id|_id)?[=/]([^/?&]+)/i)
+					const idMatch = path.match(/meeting(?:Id|_ids?)?[=/]([^/?&]+)/i)
 					throw new NotFoundError(idMatch?.[1] ?? 'unknown')
 				}
 
@@ -80,7 +119,7 @@ export class MyMeetApiClient {
 						attempt: attempt + 1,
 					})
 					await new Promise(resolve => setTimeout(resolve, delay))
-					return this.request<T>(method, path, body, attempt + 1)
+					return this.request(method, path, body, idempotencyKey, attempt + 1)
 				}
 
 				if (response.status === 429) {
@@ -90,25 +129,14 @@ export class MyMeetApiClient {
 				throw new ApiError(response.status, text)
 			}
 
-			const text = await response.text()
-			// Some endpoints legitimately return an empty body (e.g. DELETE) → null.
-			// Callers that wrap the result handle this explicitly.
-			if (!text) return null as T
-			try {
-				return JSON.parse(text) as T
-			} catch {
-				// Some endpoints return plain text, not JSON:
-				// /api/meeting/status → "processed", rename/delete → "OK".
-				// Return the raw body instead of throwing a JSON parse error.
-				return text as T
-			}
+			return parseBody(await response.text())
 		} catch (error) {
 			if (error instanceof DOMException && error.name === 'AbortError') {
 				if (attempt < MAX_RETRIES) {
 					const delay = RETRY_DELAYS[attempt] ?? 4_000
 					logger.warn(`Timeout on ${method} ${path}, retrying after ${delay}ms`)
 					await new Promise(resolve => setTimeout(resolve, delay))
-					return this.request<T>(method, path, body, attempt + 1)
+					return this.request(method, path, body, idempotencyKey, attempt + 1)
 				}
 				throw new ApiError(0, `Request timeout after ${REQUEST_TIMEOUT_MS}ms`)
 			}
@@ -137,10 +165,17 @@ export class MyMeetApiClient {
 	}
 
 	async getMeetingStatus(meetingId: string): Promise<unknown> {
-		return this.request(
+		const response = await this.request(
 			'GET',
-			`/api/meeting/status?meeting_id=${encodeURIComponent(meetingId)}`,
+			`/api/meeting/status?meeting_ids=${encodeURIComponent(meetingId)}`,
 		)
+		const batch = MeetingStatusBatchSchema.safeParse(response)
+		if (!batch.success) return response
+		const { statuses } = batch.data
+		if (!Object.hasOwn(statuses, meetingId)) {
+			throw new ApiError(502, 'Incomplete meeting status response.')
+		}
+		return statuses[meetingId]
 	}
 
 	async getMeetingReport(meetingId: string): Promise<unknown> {
@@ -177,6 +212,33 @@ export class MyMeetApiClient {
 			cron: params.cron,
 			participants: params.participants,
 		})
+	}
+
+	async importMedia({ url, templateName, speakersNumber, requestId = randomUUID() }: ImportMediaInput) {
+		let response: unknown
+		try {
+			response = await this.request(
+				'POST',
+				'/api/video/import-link',
+				{ url, template_name: templateName, speakers_number: speakersNumber },
+				requestId,
+			)
+		} catch (error) {
+			const transportFailed = error instanceof TypeError
+			const responseUnconfirmed =
+				error instanceof ApiError && (error.statusCode === 0 || (error.statusCode ?? 0) >= 500)
+			if (transportFailed || responseUnconfirmed) {
+				throw new MediaImportError('import_request_uncertain', 'The import request could not be confirmed.', 0, requestId)
+			}
+			// Preserve the backend code and request ID on typed import rejections.
+			throw error
+		}
+		const accepted = ImportAcceptedSchema.safeParse(response)
+		if (!accepted.success) {
+			throw new MediaImportError('import_request_uncertain', 'The import response could not be read.', 0, requestId)
+		}
+		const { meeting_id, source, status } = accepted.data
+		return { meetingId: meeting_id, source, status, requestId }
 	}
 
 	async renameMeeting(meetingId: string, name: string): Promise<unknown> {

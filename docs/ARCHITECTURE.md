@@ -24,7 +24,7 @@ Guide for developers working on this codebase.
        │                                   │
 ┌──────▼──────┐                   ┌────────▼─────────┐
 │  tools/*.ts  │                   │  Resource:       │
-│  11 tools    │                   │  templates       │
+│  12 tools    │                   │  templates       │
 │  Each file   │                   │  (types.ts data) │
 │  = 1 tool    │                   └──────────────────┘
 └──────┬──────┘
@@ -62,6 +62,7 @@ src/
     ├── search-meetings.ts       # Client-side filtering (API has no search endpoint)
     ├── download-meeting.ts      # md/json inline, pdf/docx as URL
     ├── record-meeting.ts        # 8 platforms + cron + auto-detect source
+    ├── import-media.ts          # Public recording links and idempotent submission
     ├── rename-meeting.ts
     ├── regenerate-template.ts   # Re-analyze with different template
     ├── update-summary.ts

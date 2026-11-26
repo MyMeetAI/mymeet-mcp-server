@@ -168,6 +168,23 @@ export const RecordMeetingSchema = z.object({
     .describe('Expected participant names'),
 });
 
+export const ImportMediaSchema = z.object({
+  url: z.string().trim().url().max(4096)
+    .regex(/^https:\/\//i, 'URL must use HTTPS')
+    .describe('Public HTTPS link to one YouTube video, Yandex Disk file, or Google Drive file'),
+  templateName: z.string().trim().min(1).max(200).optional().describe(
+    'Analysis template name. Omit to use the default in the selected workspace',
+  ),
+  speakersNumber: z.number().int().min(0).max(50).optional().describe(
+    'Expected number of speakers, or 0 to detect automatically (default)',
+  ),
+  requestId: z.string().uuid().optional().describe(
+    'UUID for this import request. Reuse it with the same settings after a timeout. Omit to generate one',
+  ),
+});
+
+export type ImportMediaInput = z.infer<typeof ImportMediaSchema>;
+
 export const RenameMeetingSchema = z.object({
   meetingId: z.string().describe('The unique meeting ID'),
   name: z.string().min(1).describe('New meeting title'),

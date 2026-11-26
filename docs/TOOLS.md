@@ -1,6 +1,6 @@
 # MyMeet MCP Server — Tool Reference
 
-Detailed documentation for all 11 tools with parameters, examples, and edge cases.
+Detailed documentation for all 12 tools with parameters, examples, and edge cases.
 
 ---
 
@@ -55,15 +55,35 @@ Check processing status of a specific meeting.
 |------|------|----------|-------------|
 | `meetingId` | string | Yes | The unique meeting ID |
 
-**Statuses:** `new` → `queued` → `processing` → `processed` / `failed`
-
 **Example prompt:** "Is my meeting from today done processing?"
 
-**When to use:** After `mymeet_record_meeting` or uploading a file, poll this until status is `processed`.
+For a recorded meeting or an uploaded file, `ready: true` means its transcript and any available report are ready. Both `new` and `processed` are ready. When recording fails, `status` may include the cause, for example `failed: Waiting room`.
+
+For link imports, call this tool with the `meetingId` from `mymeet_import_media`. Check `mediaImport.phase` to track the whole recording. `pending`, `downloading`, `validating`, `retry_wait`, `ready`, and `processing` are in progress. `completed`, `failed`, and `cancelled` are terminal. On a split recording, `ready: true` can describe the first part while later parts are still processing. The report's `followup_v2.part.meetings` lists the available parts and their IDs.
+
+When available, `mediaImport` includes `downloadedBytes`, `totalBytes`, `processingPercentage`, `generation`, `attempt`, or an `error` with `code` and `retryable`.
+
+`parseError: true` means the server could not read the full status response. Check again before reporting completion. If the meeting status itself is unreadable, the tool returns `status: "unknown"` and `ready: false`.
+
+```json
+{
+  "meetingId": "9cd6d0a0-67ea-4a97-8aa2-590ad41350e6",
+  "status": "processing",
+  "ready": false,
+  "mediaImport": {
+    "phase": "downloading",
+    "downloadedBytes": 1048576,
+    "totalBytes": 8388608,
+    "generation": 1,
+    "attempt": 1
+  }
+}
+```
 
 **Edge cases:**
 - Meeting not found: returns `NotFoundError` with suggestion to use `mymeet_list_meetings`
-- Meeting still processing: returns current status — the LLM should wait and retry
+- Meeting unavailable to this account: returns a tool error for denied access
+- Meeting still processing: returns current progress. Check back later.
 
 ---
 
@@ -231,6 +251,36 @@ Schedule or start recording an online meeting.
 
 ---
 
+### mymeet_import_media
+
+Import a recording from a public YouTube, Yandex Disk, or Google Drive link. Supply one HTTPS link to a video or a downloadable audio/video file. The service accepts individual recordings that can be accessed without signing in to the provider. The import uses the MyMeet workspace selected for API access, with the main workspace as a fallback. Processing consumes minutes in that workspace.
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `url` | URL | Yes | Public link to a single recording |
+| `templateName` | string | No | Analysis template name. Omit to use the default in the selected workspace |
+| `speakersNumber` | integer | No | Number of speakers, 0–50. Defaults to 0 for automatic detection |
+| `requestId` | UUID | No | An ID for this submission. Generated when omitted. Reuse it with the same parameters when retrying an uncertain submission |
+
+**Example prompt:** "Import this public YouTube recording and get its transcript once processing completes."
+
+**Example response:**
+
+```json
+{
+  "meetingId": "9cd6d0a0-67ea-4a97-8aa2-590ad41350e6",
+  "source": "youtube",
+  "status": "processing",
+  "requestId": "767d204f-6c01-4ebf-8d9f-88ded24d5ac7"
+}
+```
+
+The response confirms that MyMeet accepted the import. Use [`mymeet_get_meeting_status`](#mymeet_get_meeting_status) with the returned ID, then fetch the transcript and any report available on the workspace plan. Possible sources are `youtube`, `yandex_disk`, and `google_drive`.
+
+Admission errors include `code` and `requestId`. If you get `import_request_uncertain`, the import may already have started. Retry with the returned ID and the original parameters in the same MyMeet workspace. If processing fails after the import is accepted, read `mediaImport.error` in the status response.
+
+---
+
 ### mymeet_rename_meeting
 
 **Parameters:**
@@ -334,6 +384,7 @@ All tools return structured errors with an LLM-friendly `suggestion` field:
 | `ValidationError` | 400 | Invalid parameters | Check tool schema |
 | `RateLimitError` | 429 | Too many requests | Auto-retry (built-in) |
 | `ApiError` | 5xx | Server error | Check API status |
+| `MediaImportError` | varies | Import submission rejected or unconfirmed | Read `code` and `suggestion`. Keep `requestId` for a safe repeat of the same submission |
 
 ## MCP Resource
 

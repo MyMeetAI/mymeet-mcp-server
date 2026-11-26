@@ -81,6 +81,38 @@ export class ApiError extends MyMeetError {
   }
 }
 
+const importSuggestions: Readonly<Record<string, string>> = {
+  unsupported_url: 'Use a public HTTPS link to one YouTube video, Yandex Disk file, or Google Drive file.',
+  invalid_request: 'Check the import parameters before retrying.',
+  unauthorized: 'Reconnect your MyMeet account or check your MyMeet API key.',
+  forbidden: 'Check access to the workspace selected for MyMeet integrations.',
+  insufficient_minutes: 'Check the minute balance in your MyMeet API workspace.',
+  idempotency_conflict: 'Reuse the original settings with this request ID, or use a new ID for a different import.',
+  import_limit_reached: 'Wait for an active import to finish before starting another.',
+  rate_limit_exceeded: 'Wait before retrying with the same request ID.',
+  provider_unavailable: 'The provider is currently unavailable. Try again later with the same request ID.',
+  import_request_uncertain: 'The import may already have started. ' +
+    'Retry with the same request ID and settings in the same MyMeet workspace to avoid creating another meeting.',
+};
+
+export class MediaImportError extends MyMeetError {
+  constructor(
+    public readonly code: string,
+    message: string,
+    statusCode: number,
+    public readonly requestId: string,
+  ) {
+    super(
+      message,
+      Object.hasOwn(importSuggestions, code)
+        ? importSuggestions[code]
+        : 'Use the same request ID and settings if retrying this import.',
+      statusCode,
+    );
+    this.name = 'MediaImportError';
+  }
+}
+
 /**
  * Format error for MCP tool response.
  * Returns { isError: true, content: [...] } with helpful suggestion.
@@ -100,6 +132,7 @@ export function formatToolError(error: unknown): {
               error: error.name,
               message: error.message,
               suggestion: error.suggestion,
+              ...(error instanceof MediaImportError && { code: error.code, requestId: error.requestId }),
             },
             null,
             2,

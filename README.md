@@ -4,7 +4,7 @@
 
 Connect your AI assistant to your meetings. Record, transcribe, search, analyze, and export meetings from Google Meet, Zoom, Microsoft Teams and 5 more platforms — directly from Claude, Cursor, Codex, or any MCP-compatible client.
 
-- 🧰 **11 tools** — list, search, check status, summarize, transcript, download, record, rename, re-analyze, edit, delete
+- 🧰 **12 tools** — list, search, check status, summarize, transcript, download, record, import, rename, re-analyze, edit, delete
 - 🗂️ **11 analysis templates** — sales, HR, 1:1, research, protocol, medical, and more
 - 🔌 **Two ways to run** — locally over stdio (`npx`, zero config) or against a remote server over HTTP
 - 🔑 **Simple auth** — your MyMeet API key (an env var locally, `Authorization: Bearer …` over HTTP)
@@ -251,12 +251,13 @@ Read-only tools default to the current user's meetings (`scope: "mine"`); pass `
 | Tool | Type | Description |
 |------|------|-------------|
 | `mymeet_list_meetings` | read | List meetings (paginated). `scope: "workspace"` for all workspace meetings |
-| `mymeet_get_meeting_status` | read | Processing status: `new → queued → processing → processed / failed` |
+| `mymeet_get_meeting_status` | read | Meeting readiness and progress of linked recordings |
 | `mymeet_get_meeting_report` | read | AI summary: key points, action items, decisions (no transcript) |
 | `mymeet_get_transcript` | read | Full transcript with speaker labels and timestamps |
 | `mymeet_search_meetings` | read | Search across all pages by title, people, date range, or status |
 | `mymeet_download_meeting` | read | Export report — `md`/`json` inline, `pdf`/`docx` as a download URL |
 | `mymeet_record_meeting` | write | Schedule/start recording on 8 platforms, with optional cron |
+| `mymeet_import_media` | write | Import one public YouTube, Yandex Disk, or Google Drive recording |
 | `mymeet_rename_meeting` | write | Rename a meeting |
 | `mymeet_regenerate_template` | write | Re-analyze a meeting with a different template |
 | `mymeet_update_summary` | write | Edit AI-generated summary sections |
@@ -300,6 +301,7 @@ The platform is auto-detected from the meeting URL, or set it explicitly with th
 "Find my meetings with Vladimir from last week"
 "Show all workspace meetings that failed processing"
 "Record my Zoom meeting tomorrow at 2pm as a sales meeting"
+"Import this public Google Drive recording and tell me when its transcript is ready"
 "Re-analyze meeting X using the hr-interview template"
 "Download the report for meeting Y as markdown"
 ```
@@ -373,7 +375,7 @@ MCP client (Claude / Cursor / Codex / Code / …)
         ▼
    index.ts      parse args, resolve credential, start transport
         ▼
-   server.ts     register 11 tools + templates resource
+   server.ts     register tools and the templates resource
         ▼
    client.ts     native fetch · 15s timeout · retry w/ backoff
         ▼
